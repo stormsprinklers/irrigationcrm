@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { uploadPrivateBlob } from "@/lib/blob/storage";
 import { createPublicCapability } from "@/lib/security/public-capability";
 import { loadHolidayPriceLookup } from "./catalog";
+import { applyHolidayPricingSnapshot, snapshotHolidayPrices } from "./quote-prices";
 import {
   computeHolidayQuotePricing,
   HOLIDAY_BUY_DETAIL,
@@ -40,13 +41,28 @@ export async function createEstimateFromHolidayQuote(params: {
 
   const catalog = parseHolidayCatalog(company.holidayLightingCatalog);
   const rootMeasurements = parseHolidayMeasurements(quote.measurements);
-  const rootSelections = applyHolidayCatalogPolicy(parseHolidaySelections(quote.selections), catalog);
+  let rootSelections = applyHolidayCatalogPolicy(parseHolidaySelections(quote.selections), catalog);
+  const priceBookPrices = await loadHolidayPriceLookup(params.companyId);
+  const revising = params.mode === "revise" && Boolean(quote.estimateId);
+  if (revising && !rootSelections.pricingSnapshot) {
+    throw new Error("Review and save the per-foot pricing before revising this older estimate.");
+  }
+  if (!rootSelections.pricingSnapshot) {
+    rootSelections = {
+      ...rootSelections,
+      pricingSnapshot: snapshotHolidayPrices(priceBookPrices),
+    };
+    await prisma.holidayLightingQuote.update({
+      where: { id: quote.id },
+      data: { selections: rootSelections },
+    });
+  }
   const designs = holidayDesignOptionsFromQuote({
     measurements: rootMeasurements,
     selections: rootSelections,
     catalog,
   });
-  const prices = await loadHolidayPriceLookup(params.companyId);
+  const prices = applyHolidayPricingSnapshot(priceBookPrices, rootSelections.pricingSnapshot);
   const address = [quote.address, quote.city, quote.state, quote.zip].filter(Boolean).join(", ");
   const prepared = designs.map((design, index) => {
     const selections = applyHolidayCatalogPolicy(design.selections, catalog);
@@ -140,7 +156,6 @@ export async function createEstimateFromHolidayQuote(params: {
     })),
   };
   const expiresAt = computeEstimateExpiry(company.estimateExpiryDays);
-  const revising = params.mode === "revise" && Boolean(quote.estimateId);
   const existingEstimate = revising
     ? await prisma.estimate.findFirst({ where: { id: quote.estimateId!, companyId: params.companyId } })
     : null;

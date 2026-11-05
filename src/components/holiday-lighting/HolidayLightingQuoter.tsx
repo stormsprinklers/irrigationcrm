@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Check, ChevronDown, Loader2, Plus, Search, Sparkles, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Check, ChevronDown, Loader2, Plus, Search, Sparkles, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { AddressAutocompleteInput } from "@/components/customers/AddressFields";
 import { CustomerSearchPicker } from "@/components/customers/CustomerSearchPicker";
@@ -293,6 +293,10 @@ export function HolidayLightingQuoter({
   const [customColorEditingOptionId, setCustomColorEditingOptionId] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<HolidayLightingCatalog>(DEFAULT_HOLIDAY_CATALOG);
   const [holidayPrices, setHolidayPrices] = useState<HolidayPriceRow[]>([]);
+  const [priceBookPrices, setPriceBookPrices] = useState<HolidayPriceRow[]>([]);
+  const [pricingSnapshotMissing, setPricingSnapshotMissing] = useState(false);
+  const [pricingSnapshotChanged, setPricingSnapshotChanged] = useState(false);
+  const [revisionPriceDrafts, setRevisionPriceDrafts] = useState<Record<string, string>>({});
   const [additionalItemSearch, setAdditionalItemSearch] = useState("");
   const [additionalItemPickerOpen, setAdditionalItemPickerOpen] = useState(false);
   const [pricing, setPricing] = useState<HolidayPricingResult | null>(null);
@@ -347,7 +351,12 @@ export function HolidayLightingQuoter({
       setCenter(q.lat != null && q.lng != null ? { lat: q.lat, lng: q.lng } : null);
       const nextCatalog = (data.catalog as HolidayLightingCatalog | undefined) ?? DEFAULT_HOLIDAY_CATALOG;
       setCatalog(nextCatalog);
-      setHolidayPrices(Array.isArray(data.prices) ? data.prices : []);
+      const loadedPrices = Array.isArray(data.prices) ? data.prices as HolidayPriceRow[] : [];
+      setHolidayPrices(loadedPrices);
+      setPriceBookPrices(Array.isArray(data.priceBookPrices) ? data.priceBookPrices : loadedPrices);
+      setPricingSnapshotMissing(data.pricingSnapshotMissing === true);
+      setPricingSnapshotChanged(data.pricingSnapshotChanged === true);
+      setRevisionPriceDrafts(Object.fromEntries(loadedPrices.map((row) => [row.sku, String(row.unitPrice)])));
       const parsedMeasurements = parseHolidayMeasurements(q.measurements);
       const parsedSelections = applyHolidayCatalogPolicy(
         parseHolidaySelections(q.selections),
@@ -400,7 +409,10 @@ export function HolidayLightingQuoter({
           catalog: nextCatalog,
         });
         setCatalog(nextCatalog);
-        setHolidayPrices(Array.isArray(data.prices) ? data.prices : []);
+        const loadedPrices = Array.isArray(data.prices) ? data.prices as HolidayPriceRow[] : [];
+        setHolidayPrices(loadedPrices);
+        setPriceBookPrices(loadedPrices);
+        setRevisionPriceDrafts(Object.fromEntries(loadedPrices.map((row) => [row.sku, String(row.unitPrice)])));
         setSelections({ ...nextSelections, designOptions: initialOption, activeDesignOptionId: initialOption[0]!.id });
         setDesignOptions(initialOption);
         setActiveOptionId(initialOption[0]!.id);
@@ -632,7 +644,15 @@ export function HolidayLightingQuoter({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Save failed");
       if (data.pricing) setPricing(data.pricing);
-      if (Array.isArray(data.prices)) setHolidayPrices(data.prices);
+      if (Array.isArray(data.prices)) {
+        setHolidayPrices(data.prices);
+        setRevisionPriceDrafts(Object.fromEntries(
+          (data.prices as HolidayPriceRow[]).map((row) => [row.sku, String(row.unitPrice)])
+        ));
+      }
+      if (Array.isArray(data.priceBookPrices)) setPriceBookPrices(data.priceBookPrices);
+      setPricingSnapshotMissing(data.pricingSnapshotMissing === true);
+      setPricingSnapshotChanged(data.pricingSnapshotChanged === true);
       if (!quoteRouteReplacedRef.current) {
         quoteRouteReplacedRef.current = true;
         router.replace(`/holiday-lighting/quote/${id}`);
@@ -1386,6 +1406,23 @@ export function HolidayLightingQuoter({
     }
   }
 
+  async function saveRevisionPricing(useCurrentPriceBook: boolean) {
+    const basePrices = useCurrentPriceBook ? priceBookPrices : holidayPrices;
+    const pricingSnapshot = Object.fromEntries(basePrices.map((row) => {
+      const entered = Number(revisionPriceDrafts[row.sku]);
+      const unitPrice = !useCurrentPriceBook && Number.isFinite(entered) && entered >= 0
+        ? Math.round(entered * 100) / 100
+        : row.unitPrice;
+      return [row.sku, { unitPrice, unitCost: row.unitCost }];
+    }));
+    const nextSelections = { ...selections, pricingSnapshot };
+    setSelections(nextSelections);
+    const saved = await save({ selections: nextSelections }, { quiet: true });
+    if (saved) {
+      toast.success(useCurrentPriceBook ? "Revision updated to current price-book rates" : "Revision pricing saved");
+    }
+  }
+
   async function clearQuoteWork() {
     const resetSelections = holidaySelectionsFromCatalog(catalog);
     const resetOptions = holidayDesignOptionsFromQuote({
@@ -1454,6 +1491,14 @@ export function HolidayLightingQuoter({
     : holidayDesignOptionsFromQuote({ measurements, selections, catalog });
   const activeDesignOption = renderedDesignOptions.find((option) => option.id === activeOptionId)
     ?? renderedDesignOptions[0];
+  const revisionPriceRows = priceBookPrices.filter((current) => {
+    const saved = holidayPrices.find((row) => row.sku === current.sku);
+    if (pricingSnapshotMissing) return current.sku.endsWith("-FT");
+    return Boolean(saved && saved.unitPrice !== current.unitPrice);
+  });
+  const showRevisionPricingWarning = Boolean(
+    estimate && (pricingSnapshotMissing || pricingSnapshotChanged)
+  );
 
   if (loading) {
     return <p className="text-sm text-muted-foreground">Loading quote…</p>;
@@ -1509,6 +1554,53 @@ export function HolidayLightingQuoter({
           ) : null}
         </div>
       </div>
+
+      {showRevisionPricingWarning ? (
+        <section className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <h2 className="font-semibold">Review pricing before revising this estimate</h2>
+              <p className="mt-1 text-sm">
+                {pricingSnapshotMissing
+                  ? "This older quote does not have saved per-foot rates. Enter the rates originally quoted, or explicitly use today’s price-book rates. The existing estimate cannot be revised until pricing is confirmed."
+                  : "The price book has changed since this quote was created. Scope edits will continue using the saved quote rates unless you update them here."}
+              </p>
+              {revisionPriceRows.length ? (
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {revisionPriceRows.map((current) => {
+                    const saved = holidayPrices.find((row) => row.sku === current.sku);
+                    return (
+                      <label key={current.sku} className="rounded-md border border-amber-200 bg-white/80 p-2 text-xs font-medium">
+                        <span className="block truncate">{current.name}</span>
+                        <span className="mt-0.5 block font-normal text-amber-800">Current price book: {money(current.unitPrice)}</span>
+                        <span className="mt-2 block">Revision rate ($)</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={9999999}
+                          step="0.01"
+                          value={revisionPriceDrafts[current.sku] ?? String(saved?.unitPrice ?? current.unitPrice)}
+                          onChange={(event) => setRevisionPriceDrafts((drafts) => ({ ...drafts, [current.sku]: event.target.value }))}
+                          className="mt-1 h-9 w-full rounded-md border border-amber-300 bg-white px-2 text-sm text-foreground"
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : null}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button type="button" size="sm" disabled={saving} onClick={() => void saveRevisionPricing(false)}>
+                  Save revision rates
+                </Button>
+                <Button type="button" size="sm" variant="outline" disabled={saving} onClick={() => void saveRevisionPricing(true)}>
+                  Use current price book
+                </Button>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-white p-2">
         <CustomerSearchPicker

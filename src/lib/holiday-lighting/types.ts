@@ -110,7 +110,14 @@ export type HolidayQuoteSelections = {
   leaseContractYears?: HolidayLeaseContractYears;
   designOptions?: HolidayQuoteDesignOption[];
   activeDesignOptionId?: string;
+  /** Quote-level rates retained so later scope revisions do not silently adopt price-book changes. */
+  pricingSnapshot?: HolidayPricingSnapshot;
 };
+
+export type HolidayPricingSnapshot = Record<string, {
+  unitPrice: number;
+  unitCost: number | null;
+}>;
 
 export type HolidayPhotoStroke = {
   id: string;
@@ -645,6 +652,7 @@ export function applyHolidayCatalogPolicy(
     leaseContractYears: 1,
     designOptions: selections.designOptions,
     activeDesignOptionId: selections.activeDesignOptionId,
+    pricingSnapshot: selections.pricingSnapshot,
   };
 }
 
@@ -787,6 +795,7 @@ export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
       : Number(obj.leaseContractYears) === 5
         ? 5
         : 1;
+  const pricingSnapshot = parseHolidayPricingSnapshot(obj.pricingSnapshot);
   const designOptions: HolidayQuoteDesignOption[] = Array.isArray(obj.designOptions)
     ? obj.designOptions.slice(0, MAX_ESTIMATE_OPTIONS).flatMap((rawOption, index) => {
         if (!rawOption || typeof rawOption !== "object") return [];
@@ -857,7 +866,26 @@ export function parseHolidaySelections(raw: unknown): HolidayQuoteSelections {
     designOptions,
     activeDesignOptionId:
       typeof obj.activeDesignOptionId === "string" ? obj.activeDesignOptionId : undefined,
+    pricingSnapshot,
   };
+}
+
+export function parseHolidayPricingSnapshot(raw: unknown): HolidayPricingSnapshot | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const entries = Object.entries(raw as Record<string, unknown>).slice(0, 250).flatMap(([rawSku, rawValue]) => {
+    const sku = rawSku.trim().slice(0, 120);
+    if (!sku || !rawValue || typeof rawValue !== "object" || Array.isArray(rawValue)) return [];
+    const value = rawValue as { unitPrice?: unknown; unitCost?: unknown };
+    const unitPrice = Number(value.unitPrice);
+    const unitCost = value.unitCost == null ? null : Number(value.unitCost);
+    if (!Number.isFinite(unitPrice) || unitPrice < 0 || unitPrice > 9_999_999) return [];
+    if (unitCost != null && (!Number.isFinite(unitCost) || unitCost < 0 || unitCost > 9_999_999)) return [];
+    return [[sku, {
+      unitPrice: Math.round(unitPrice * 100) / 100,
+      unitCost: unitCost == null ? null : Math.round(unitCost * 100) / 100,
+    }] as const];
+  });
+  return entries.length ? Object.fromEntries(entries) : undefined;
 }
 
 export function holidayDesignOptionsFromQuote(params: {

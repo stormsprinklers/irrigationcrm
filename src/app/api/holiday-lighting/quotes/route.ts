@@ -20,6 +20,7 @@ import {
   parseHolidaySelections,
   type HolidayLightingCatalog,
 } from "@/lib/holiday-lighting/types";
+import { applyHolidayPricingSnapshot } from "@/lib/holiday-lighting/quote-prices";
 import { prisma } from "@/lib/prisma";
 
 function calculateDraftPriceTotals(
@@ -34,6 +35,7 @@ function calculateDraftPriceTotals(
       parseHolidaySelections(selectionsValue),
       catalog
     );
+    const quotePrices = applyHolidayPricingSnapshot(prices, selections.pricingSnapshot);
     return holidayDesignOptionsFromQuote({ measurements, selections, catalog }).map((design) => {
       const designSelections = applyHolidayCatalogPolicy(design.selections, catalog);
       const style = catalog.lightStyles.find(
@@ -43,7 +45,7 @@ function calculateDraftPriceTotals(
         catalog,
         measurements: parseHolidayMeasurements(design.measurements),
         selections: designSelections,
-        prices,
+        prices: quotePrices,
       });
       return style?.kind === "permanent"
         ? pricing.optionDetails.permanent.total
@@ -257,6 +259,9 @@ export async function POST(request: NextRequest) {
 
     const catalog = await loadHolidayCatalog(user.companyId);
     await ensureHolidayPriceBookItems(user.companyId, catalog);
+    const requestedSelections = body.selections
+      ? applyHolidayCatalogPolicy(parseHolidaySelections(body.selections), catalog)
+      : holidaySelectionsFromCatalog(catalog);
     const quote = await prisma.holidayLightingQuote.create({
       data: {
         companyId: user.companyId,
@@ -273,9 +278,7 @@ export async function POST(request: NextRequest) {
         measurements: body.measurements
           ? parseHolidayMeasurements(body.measurements)
           : EMPTY_HOLIDAY_MEASUREMENTS,
-        selections: body.selections
-          ? applyHolidayCatalogPolicy(parseHolidaySelections(body.selections), catalog)
-          : holidaySelectionsFromCatalog(catalog),
+        selections: requestedSelections,
       },
     });
     return NextResponse.json({ quote });

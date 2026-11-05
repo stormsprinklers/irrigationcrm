@@ -13,6 +13,10 @@ import {
 import { createEstimateFromHolidayQuote } from "@/lib/holiday-lighting/create-estimate";
 import { computeHolidayQuotePricing } from "@/lib/holiday-lighting/pricing";
 import {
+  applyHolidayPricingSnapshot,
+  holidayPricingSnapshotChanged,
+} from "@/lib/holiday-lighting/quote-prices";
+import {
   applyHolidayCatalogPolicy,
   holidayDesignOptionsFromQuote,
   parseHolidayMeasurements,
@@ -56,11 +60,12 @@ export async function GET(request: NextRequest, { params }: Params) {
     if (!quote) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const catalog = await loadHolidayCatalog(user.companyId);
-    const prices = await loadHolidayPriceLookup(user.companyId);
+    const priceBookPrices = await loadHolidayPriceLookup(user.companyId);
     const selections = applyHolidayCatalogPolicy(
       parseHolidaySelections(quote.selections),
       catalog
     );
+    const prices = applyHolidayPricingSnapshot(priceBookPrices, selections.pricingSnapshot);
     const measurements = parseHolidayMeasurements(quote.measurements);
     const options = holidayDesignOptionsFromQuote({ measurements, selections, catalog });
     const active = options.find((option) => option.id === selections.activeDesignOptionId) ?? options[0]!;
@@ -71,7 +76,16 @@ export async function GET(request: NextRequest, { params }: Params) {
       prices,
     });
 
-    return NextResponse.json({ quote, catalog, prices: serializePrices(prices), pricing, optionPricing: Object.fromEntries(options.map((option) => [option.id, computeHolidayQuotePricing({ catalog, measurements: option.measurements, selections: applyHolidayCatalogPolicy(option.selections, catalog), prices })])) });
+    return NextResponse.json({
+      quote,
+      catalog,
+      prices: serializePrices(prices),
+      priceBookPrices: serializePrices(priceBookPrices),
+      pricingSnapshotMissing: Boolean(quote.estimateId && !selections.pricingSnapshot),
+      pricingSnapshotChanged: holidayPricingSnapshotChanged(priceBookPrices, selections.pricingSnapshot),
+      pricing,
+      optionPricing: Object.fromEntries(options.map((option) => [option.id, computeHolidayQuotePricing({ catalog, measurements: option.measurements, selections: applyHolidayCatalogPolicy(option.selections, catalog), prices })])),
+    });
   } catch (error) {
     if (error instanceof Error && error.message.includes("disabled")) {
       return forbiddenResponse(error.message);
@@ -128,10 +142,18 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     }
     if ("measurements" in body) data.measurements = parseHolidayMeasurements(body.measurements);
     if ("selections" in body) {
-      data.selections = applyHolidayCatalogPolicy(
+      const incomingSelections = applyHolidayCatalogPolicy(
         parseHolidaySelections(body.selections),
         catalog
       );
+      const existingSelections = applyHolidayCatalogPolicy(
+        parseHolidaySelections(existing.selections),
+        catalog
+      );
+      data.selections = {
+        ...incomingSelections,
+        pricingSnapshot: incomingSelections.pricingSnapshot ?? existingSelections.pricingSnapshot,
+      };
     }
 
     const quote = await prisma.holidayLightingQuote.update({
@@ -143,9 +165,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       },
     });
 
-    const prices = await loadHolidayPriceLookup(user.companyId);
+    const priceBookPrices = await loadHolidayPriceLookup(user.companyId);
     const savedMeasurements = parseHolidayMeasurements(quote.measurements);
     const savedSelections = applyHolidayCatalogPolicy(parseHolidaySelections(quote.selections), catalog);
+    const prices = applyHolidayPricingSnapshot(priceBookPrices, savedSelections.pricingSnapshot);
     const options = holidayDesignOptionsFromQuote({
       measurements: savedMeasurements,
       selections: savedSelections,
@@ -159,7 +182,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       prices,
     });
 
-    return NextResponse.json({ quote, prices: serializePrices(prices), pricing, optionPricing: Object.fromEntries(options.map((option) => [option.id, computeHolidayQuotePricing({ catalog, measurements: option.measurements, selections: applyHolidayCatalogPolicy(option.selections, catalog), prices })])) });
+    return NextResponse.json({
+      quote,
+      prices: serializePrices(prices),
+      priceBookPrices: serializePrices(priceBookPrices),
+      pricingSnapshotMissing: Boolean(quote.estimateId && !savedSelections.pricingSnapshot),
+      pricingSnapshotChanged: holidayPricingSnapshotChanged(priceBookPrices, savedSelections.pricingSnapshot),
+      pricing,
+      optionPricing: Object.fromEntries(options.map((option) => [option.id, computeHolidayQuotePricing({ catalog, measurements: option.measurements, selections: applyHolidayCatalogPolicy(option.selections, catalog), prices })])),
+    });
   } catch (error) {
     if (error instanceof Error && error.message.includes("disabled")) {
       return forbiddenResponse(error.message);
