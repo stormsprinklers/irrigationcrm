@@ -1,5 +1,5 @@
 import { UserRole } from "@prisma/client";
-import type { ApplicantStage } from "@prisma/client";
+import type { ApplicantStage, ApplicantStageSource } from "@prisma/client";
 
 export function canAccessHiring(role: string | null | undefined) {
   return role === UserRole.ADMIN || role === UserRole.MANAGER;
@@ -14,6 +14,18 @@ export function stageFromAiScore(score: number | null | undefined): ApplicantSta
 
 export function stageNeedsBookingInvite(stage: ApplicantStage) {
   return stage === "MAYBE" || stage === "GOOD_FIT";
+}
+
+export function applicantQualifiesForBookingInvite(
+  stage: ApplicantStage,
+  score: number | null | undefined,
+  stageSource: ApplicantStageSource
+) {
+  return (
+    stageNeedsBookingInvite(stage) &&
+    (stageSource === "MANUAL" ||
+      (typeof score === "number" && Number.isFinite(score) && score >= 6))
+  );
 }
 
 export function stageLabel(stage: ApplicantStage) {

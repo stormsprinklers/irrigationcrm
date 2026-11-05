@@ -307,6 +307,7 @@ export function HolidayLightingQuoter({
 
   const paintRef = useRef<PaintCanvasHandle | null>(null);
   const mapPanelRef = useRef<HolidayMapPanelHandle | null>(null);
+  const additionalItemPickerRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const optionPreviewFileRef = useRef<HTMLInputElement>(null);
   const optionPreviewTargetRef = useRef<string | null>(null);
@@ -430,6 +431,19 @@ export function HolidayLightingQuoter({
         .catch(() => {});
     }
   }, [initialId, loadQuote, initialCustomerId, initialCustomerName, initialAddress]);
+
+  useEffect(() => {
+    if (!additionalItemPickerOpen) return;
+
+    function handleOutsideClick(event: MouseEvent) {
+      if (!additionalItemPickerRef.current?.contains(event.target as Node)) {
+        setAdditionalItemPickerOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [additionalItemPickerOpen]);
 
   useEffect(() => {
     if (!visualizing) return;
@@ -1980,10 +1994,10 @@ export function HolidayLightingQuoter({
             <div>
               <h4 className="text-sm font-semibold">Additional items</h4>
               <p className="text-xs text-muted-foreground">
-                Search wreaths and garlands from the Holiday Lighting price book, or add a one-off item.
+                Search preset items from the Holiday Lighting price book, or add a one-off item.
               </p>
             </div>
-            <div className="relative">
+            <div ref={additionalItemPickerRef} className="relative">
               <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <input
                 type="search"

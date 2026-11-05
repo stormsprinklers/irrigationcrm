@@ -260,21 +260,39 @@ const PRELIT_MOUNTING_NOTE =
   "Artificial and pre-lit. Installation may require mounting brackets or fasteners to the home in order to hang it.";
 
 export const DEFAULT_HOLIDAY_ADDITIONAL_ITEMS: HolidayAdditionalCatalogItem[] = [
-  ["wreath-24", '24" wreath', "HL-WREATH-24-EACH", 41.92],
-  ["wreath-30", '30" wreath', "HL-WREATH-30-EACH", 71],
-  ["wreath-36", '36" wreath', "HL-WREATH-36-EACH", 90.7],
-  ["wreath-48", '48" wreath', "HL-WREATH-48-EACH", 201.39],
-  ["wreath-60", '60" wreath', "HL-WREATH-60-EACH", 314.58],
-  ["wreath-72", '72" wreath', "HL-WREATH-72-EACH", 423.36],
-  ["garland-9", "9 ft garland", "HL-GARLAND-9FT-EACH", 83.06],
-].map(([key, label, sku, cost]) => ({
-  key: String(key),
-  label: String(label),
-  sku: String(sku),
-  description: PRELIT_MOUNTING_NOTE,
-  defaultUnitPrice: Math.round(Number(cost) * 0.7 * 100) / 100,
-  defaultUnitCost: Number(cost),
-}));
+  ...[
+    ["wreath-24", '24" wreath', "HL-WREATH-24-EACH", 41.92],
+    ["wreath-30", '30" wreath', "HL-WREATH-30-EACH", 71],
+    ["wreath-36", '36" wreath', "HL-WREATH-36-EACH", 90.7],
+    ["wreath-48", '48" wreath', "HL-WREATH-48-EACH", 201.39],
+    ["wreath-60", '60" wreath', "HL-WREATH-60-EACH", 314.58],
+    ["wreath-72", '72" wreath', "HL-WREATH-72-EACH", 423.36],
+    ["garland-9", "9 ft garland", "HL-GARLAND-9FT-EACH", 83.06],
+  ].map(([key, label, sku, cost]) => ({
+    key: String(key),
+    label: String(label),
+    sku: String(sku),
+    description: PRELIT_MOUNTING_NOTE,
+    defaultUnitPrice: Math.round(Number(cost) * 0.7 * 100) / 100,
+    defaultUnitCost: Number(cost),
+  })),
+  {
+    key: "boom-lift-requirement",
+    label: "Boom Lift Requirement",
+    sku: "HL-BOOM-LIFT-EACH",
+    description: "Boom lift required for safe access during installation.",
+    defaultUnitPrice: 399,
+    defaultUnitCost: 0,
+  },
+  {
+    key: "large-lift-requirement",
+    label: "Large Lift Requirement",
+    sku: "HL-LARGE-LIFT-EACH",
+    description: "Large lift required for safe access during installation.",
+    defaultUnitPrice: 699,
+    defaultUnitCost: 0,
+  },
+];
 
 export const DEFAULT_HOLIDAY_CATALOG: HolidayLightingCatalog = {
   lightStyles: [

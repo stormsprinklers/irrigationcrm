@@ -78,6 +78,8 @@ test("holiday price book separates seasonal service from permanent installation"
     "HL-WREATH-60-EACH",
     "HL-WREATH-72-EACH",
     "HL-GARLAND-9FT-EACH",
+    "HL-BOOM-LIFT-EACH",
+    "HL-LARGE-LIFT-EACH",
   ]);
   assert.deepEqual(rows.slice(0, 4).map((row) => row.defaultUnitPrice), [4.59, 4.29, 5.99, 25]);
   assert.equal(rows[2]?.defaultUnitCost, 3.99);
@@ -87,13 +89,15 @@ test("holiday price book separates seasonal service from permanent installation"
   assert.ok(rows.slice(4, 6).every((row) => /service/i.test(row.name)));
   assert.ok(rows.every((row) => !/lease|parts|labor/i.test(row.name)));
   assert.deepEqual(rows.slice(6).map((row) => row.defaultUnitCost), [
-    41.92, 71, 90.7, 201.39, 314.58, 423.36, 83.06,
+    41.92, 71, 90.7, 201.39, 314.58, 423.36, 83.06, 0, 0,
   ]);
   assert.deepEqual(rows.slice(6).map((row) => row.defaultUnitPrice), [
-    29.34, 49.7, 63.49, 140.97, 220.21, 296.35, 58.14,
+    29.34, 49.7, 63.49, 140.97, 220.21, 296.35, 58.14, 399, 699,
   ]);
-  assert.ok(rows.slice(6).every((row) => /artificial and pre-lit/i.test(row.description ?? "")));
-  assert.ok(rows.slice(6).every((row) => /mounting brackets or fasteners/i.test(row.description ?? "")));
+  assert.ok(rows.slice(6, -2).every((row) => /artificial and pre-lit/i.test(row.description ?? "")));
+  assert.ok(rows.slice(6, -2).every((row) => /mounting brackets or fasteners/i.test(row.description ?? "")));
+  assert.match(rows.at(-2)?.description ?? "", /boom lift required/i);
+  assert.match(rows.at(-1)?.description ?? "", /large lift required/i);
 });
 
 test("preset additional items use price-book pricing and material cancellation cost", () => {

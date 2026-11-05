@@ -232,12 +232,30 @@ export default function HiringApplicantsPage() {
                             >
                               {row.name}
                             </Link>
+                            {row.phone ? (
+                              <a
+                                href={`tel:${row.phone.replace(/[^\d+]/g, "")}`}
+                                className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+                              >
+                                {row.phone}
+                              </a>
+                            ) : null}
                             <span className="font-mono text-sm font-semibold text-blue-600">
                               {row.aiScore != null ? `${row.aiScore}/12` : "—/12"}
                             </span>
                           </div>
                           <p className="truncate text-xs text-muted-foreground">
                             {row.jobTitle || row.jobSlug}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground/75">
+                            Applied{" "}
+                            {new Date(row.createdAt).toLocaleString(undefined, {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                              hour: "numeric",
+                              minute: "2-digit",
+                            })}
                           </p>
                         </div>
                       </div>

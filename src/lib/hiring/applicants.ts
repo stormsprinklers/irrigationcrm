@@ -2,7 +2,10 @@ import { randomBytes } from "crypto";
 import { AppNotificationType, type ApplicantStage, type JobApplicant, Prisma } from "@prisma/client";
 import { sendCompanyEmail } from "@/lib/inbox/email-branding";
 import { getCustomerBaseUrl } from "@/lib/company/customer-url";
-import { stageFromAiScore, stageNeedsBookingInvite } from "@/lib/hiring/permissions";
+import {
+  applicantQualifiesForBookingInvite,
+  stageFromAiScore,
+} from "@/lib/hiring/permissions";
 import {
   scoreApplicantAnswers,
   scoreBreakdownFromMetadata,
@@ -104,7 +107,13 @@ export async function sendHiringBookingInvite(applicantId: string) {
     },
   });
   if (!applicant) return;
-  if (!stageNeedsBookingInvite(applicant.stage)) return;
+  if (
+    !applicantQualifiesForBookingInvite(
+      applicant.stage,
+      applicant.aiScore,
+      applicant.stageSource
+    )
+  ) return;
 
   const token = await ensureBookingToken(applicant.id);
   const bookUrl = `${getCustomerBaseUrl(applicant.company)}/book/hiring/${token}`;
@@ -223,7 +232,11 @@ export async function createApplicantFromCareers(
     }).catch(() => {});
   }
 
-  if (!options?.skipBookingInvite && stageNeedsBookingInvite(stage)) {
+  if (
+    !options?.skipBookingInvite &&
+    !options?.skipScoring &&
+    applicantQualifiesForBookingInvite(stage, aiScore, "AI")
+  ) {
     void sendHiringBookingInvite(applicant.id);
   }
 
@@ -271,7 +284,10 @@ export async function updateApplicantStage(
     },
   });
 
-  if (stageNeedsBookingInvite(stage) && !updated.bookingInviteSentAt) {
+  if (
+    applicantQualifiesForBookingInvite(stage, updated.aiScore, updated.stageSource) &&
+    !updated.bookingInviteSentAt
+  ) {
     void sendHiringBookingInvite(updated.id);
   }
 
