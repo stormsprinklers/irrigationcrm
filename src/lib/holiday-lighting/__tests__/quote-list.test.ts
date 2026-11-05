@@ -34,7 +34,7 @@ async function request(query: string) {
   });
 }
 
-test("holiday quote list paginates and searches customer names", async (t) => {
+test("holiday quote list paginates and searches customer names or addresses", async (t) => {
   stub(t, prisma.user as unknown as Record<string, unknown>, "findUnique", async () => ({
     id: "staff",
     companyId: "company-a",
@@ -52,7 +52,17 @@ test("holiday quote list paginates and searches customer names", async (t) => {
     t,
     prisma.holidayLightingQuote as unknown as Record<string, unknown>,
     "findMany",
-    async () => [{ id: "quote-11", customer: { id: "customer-1", name: "Jane Doe" } }]
+    async () => [{
+      id: "quote-11",
+      customer: { id: "customer-1", name: "Jane Doe" },
+      estimate: {
+        id: "estimate-1",
+        estimateNumber: "EST-101",
+        status: "SENT",
+        total: 500,
+        options: [{ total: 500 }, { total: 2250 }],
+      },
+    }]
   );
   const count = stub(
     t,
@@ -69,13 +79,27 @@ test("holiday quote list paginates and searches customer names", async (t) => {
   assert.equal(body.page, 2);
   assert.equal(body.pageSize, 10);
   assert.equal(body.quotes[0].customer.name, "Jane Doe");
+  assert.deepEqual(body.quotes[0].priceRange, { min: 500, max: 2250 });
+  assert.equal(body.quotes[0].estimate.options, undefined);
 
   const listArgs = findMany.mock.calls[0].arguments[0];
   assert.equal(listArgs.skip, 10);
   assert.equal(listArgs.take, 10);
   assert.deepEqual(listArgs.where, {
     companyId: "company-a",
-    customer: { is: { name: { contains: "Jane", mode: "insensitive" } } },
+    AND: [{
+      OR: [
+        { customer: { is: { name: { contains: "Jane", mode: "insensitive" } } } },
+        { address: { contains: "Jane", mode: "insensitive" } },
+        { city: { contains: "Jane", mode: "insensitive" } },
+        { state: { contains: "Jane", mode: "insensitive" } },
+        { zip: { contains: "Jane", mode: "insensitive" } },
+        { property: { is: { address: { contains: "Jane", mode: "insensitive" } } } },
+        { property: { is: { city: { contains: "Jane", mode: "insensitive" } } } },
+        { property: { is: { state: { contains: "Jane", mode: "insensitive" } } } },
+        { property: { is: { zip: { contains: "Jane", mode: "insensitive" } } } },
+      ],
+    }],
   });
   assert.deepEqual(count.mock.calls[0].arguments[0].where, listArgs.where);
 });

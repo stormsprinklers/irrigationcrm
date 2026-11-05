@@ -4,8 +4,9 @@ import { pipelineSpeedSeconds } from "@/lib/customers/pipeline";
 import { employeeFirstNameLastInitial } from "@/lib/employees";
 
 export type PipelineSpeedFilter = "UNDER_5" | "FIVE_TO_30" | "OVER_30";
-export type PipelineFilters = { search?: string; city?: string; zip?: string; source?: string; createdFrom?: Date; createdTo?: Date; speed?: PipelineSpeedFilter };
+export type PipelineFilters = { search?: string; city?: string; zip?: string; source?: string; salesRepId?: string; createdFrom?: Date; createdTo?: Date; speed?: PipelineSpeedFilter };
 export type PipelineScope = { affiliateUserId?: string };
+export type PipelineSalesRepresentative = { id: string; name: string };
 export type PipelineFollowUpRow = { id: string; stage: string; sequence: number; method: string; status: string; automated: boolean; completedAt: string | null; smsSentAt: string | null; emailSentAt: string | null };
 export type PipelineRow = {
   id: string; name: string; phone: string | null; email: string | null; city: string | null; zip: string | null; createdAt: Date;
@@ -14,6 +15,7 @@ export type PipelineRow = {
   pipelineFirstContactedAt: Date | null; pipelineDeclinedAt: Date | null; pipelineDeclineReason: string | null;
   pipelineFollowUpsPausedAt: Date | null; qualifiedValue: number | null; convertedValue: number | null; soldValue: number | null;
   qualifiedEmployee: { firstName: string; lastName: string; name: string } | null;
+  convertedEmployee: { firstName: string; lastName: string; name: string } | null;
   followUps: PipelineFollowUpRow[];
 };
 type MetricsRow = { leadCount: bigint; qualifiedCount: bigint; convertedCount: bigint; soldCount: bigint; averageSpeedSeconds: number | null; qualifiedTotal: number | null; convertedTotal: number | null; soldTotal: number | null };
@@ -25,6 +27,19 @@ function pipelineWhere(companyId: string, filters: PipelineFilters, scope: Pipel
   if (filters.city?.trim()) { const value = `%${filters.city.trim()}%`; conditions.push(Prisma.sql`(c.city ILIKE ${value} OR EXISTS (SELECT 1 FROM "CustomerProperty" p WHERE p."customerId" = c.id AND p.city ILIKE ${value}))`); }
   if (filters.zip?.trim()) { const value = `%${filters.zip.trim()}%`; conditions.push(Prisma.sql`(c.zip ILIKE ${value} OR EXISTS (SELECT 1 FROM "CustomerProperty" p WHERE p."customerId" = c.id AND p.zip ILIKE ${value}))`); }
   if (filters.source?.trim()) conditions.push(Prisma.sql`COALESCE(c."pipelineLeadSource", c."leadSource", c."attributionSource", c."attributionChannel", 'Unknown source') = ${filters.source.trim()}`);
+  if (filters.salesRepId?.trim()) conditions.push(Prisma.sql`COALESCE(
+    (SELECT COALESCE(hlq."createdById", e."sentById")
+      FROM "Estimate" e
+      LEFT JOIN "HolidayLightingQuote" hlq ON hlq."estimateId" = e.id
+      WHERE e."customerId" = c.id AND e."companyId" = c."companyId"
+        AND e.status IN ('APPROVED'::"EstimateStatus", 'CONVERTED'::"EstimateStatus")
+      ORDER BY COALESCE(e."approvedAt", e."updatedAt") ASC, e.id ASC LIMIT 1),
+    (SELECT COALESCE(hlq."createdById", e."sentById")
+      FROM "Estimate" e
+      LEFT JOIN "HolidayLightingQuote" hlq ON hlq."estimateId" = e.id
+      WHERE e."customerId" = c.id AND e."companyId" = c."companyId" AND e."sentAt" IS NOT NULL
+      ORDER BY e."sentAt" DESC, e.id DESC LIMIT 1)
+  ) = ${filters.salesRepId.trim()}`);
   if (filters.createdFrom) conditions.push(Prisma.sql`c."createdAt" >= ${filters.createdFrom}`);
   if (filters.createdTo) conditions.push(Prisma.sql`c."createdAt" < ${filters.createdTo}`);
   const speedSeconds = Prisma.sql`EXTRACT(EPOCH FROM (c."pipelineFirstContactedAt" - c."pipelineLeadAt"))`;
@@ -65,43 +80,66 @@ const PIPELINE_SELECT = Prisma.sql`
     c."pipelineDeclinedAt", c."pipelineDeclineReason"::text AS "pipelineDeclineReason", c."pipelineFollowUpsPausedAt",
     ${QUALIFIED_VALUE}::float8 AS "qualifiedValue", ${CONVERTED_VALUE}::float8 AS "convertedValue", ${SOLD_VALUE}::float8 AS "soldValue",
     (SELECT jsonb_build_object('firstName', u."firstName", 'lastName', u."lastName", 'name', u.name)
-      FROM "Estimate" e JOIN "User" u ON u.id = e."sentById"
+      FROM "Estimate" e
+      LEFT JOIN "HolidayLightingQuote" hlq ON hlq."estimateId" = e.id
+      JOIN "User" u ON u.id = COALESCE(hlq."createdById", e."sentById")
       WHERE e."customerId" = c.id AND e."companyId" = c."companyId" AND e."sentAt" IS NOT NULL
       ORDER BY e."sentAt" DESC, e.id DESC LIMIT 1) AS "qualifiedEmployee",
+    (SELECT jsonb_build_object('firstName', u."firstName", 'lastName', u."lastName", 'name', u.name)
+      FROM "Estimate" e
+      LEFT JOIN "HolidayLightingQuote" hlq ON hlq."estimateId" = e.id
+      JOIN "User" u ON u.id = COALESCE(hlq."createdById", e."sentById")
+      WHERE e."customerId" = c.id AND e."companyId" = c."companyId"
+        AND e.status IN ('APPROVED'::"EstimateStatus", 'CONVERTED'::"EstimateStatus")
+      ORDER BY COALESCE(e."approvedAt", e."updatedAt") ASC, e.id ASC LIMIT 1) AS "convertedEmployee",
     COALESCE((SELECT jsonb_agg(jsonb_build_object('id', pf.id, 'stage', pf.stage::text, 'sequence', pf.sequence, 'method', pf.method::text, 'status', pf.status::text, 'automated', pf.automated, 'completedAt', pf."completedAt", 'smsSentAt', pf."smsSentAt", 'emailSentAt', pf."emailSentAt") ORDER BY pf.stage, pf.sequence)
       FROM "PipelineFollowUp" pf WHERE pf."customerId" = c.id AND pf.status IN ('COMPLETED', 'SKIPPED')), '[]'::jsonb) AS "followUps"
   FROM "Customer" c LEFT JOIN LATERAL (SELECT p.city, p.zip FROM "CustomerProperty" p WHERE p."customerId" = c.id ORDER BY p."isPrimary" DESC, p."createdAt" ASC LIMIT 1) primary_property ON true
 `;
+
+function serializePipelineRow({ qualifiedEmployee, convertedEmployee, ...row }: PipelineRow) {
+  const qualifiedEmployeeName = qualifiedEmployee
+    ? employeeFirstNameLastInitial(qualifiedEmployee) || null
+    : null;
+  const convertedEmployeeName = convertedEmployee
+    ? employeeFirstNameLastInitial(convertedEmployee) || null
+    : qualifiedEmployeeName;
+  return {
+    ...row,
+    speedSeconds: pipelineSpeedSeconds(row),
+    qualifiedEmployeeName,
+    convertedEmployeeName,
+  };
+}
 
 export async function querySalesPipeline(companyId: string, filters: PipelineFilters, options: { skip: number; take: number }, scope: PipelineScope = {}) {
   const where = pipelineWhere(companyId, filters, scope);
   const sourceScope = scope.affiliateUserId
     ? Prisma.sql`AND c."affiliateUserId" = ${scope.affiliateUserId}`
     : Prisma.empty;
-  const [rows, metricsRows, sourceRows] = await Promise.all([
+  const [rows, metricsRows, sourceRows, salesRepresentativeRows] = await Promise.all([
     prisma.$queryRaw<PipelineRow[]>(Prisma.sql`${PIPELINE_SELECT} WHERE ${where} ORDER BY c."pipelineLeadAt" DESC, c.id ASC LIMIT ${options.take} OFFSET ${options.skip}`),
     prisma.$queryRaw<MetricsRow[]>(Prisma.sql`SELECT COUNT(*) AS "leadCount", COUNT(*) FILTER (WHERE c."pipelineQualifiedAt" IS NOT NULL) AS "qualifiedCount", COUNT(*) FILTER (WHERE c."pipelineConvertedAt" IS NOT NULL) AS "convertedCount", COUNT(*) FILTER (WHERE c."pipelineSoldAt" IS NOT NULL) AS "soldCount", AVG(EXTRACT(EPOCH FROM (c."pipelineFirstContactedAt" - c."pipelineLeadAt"))) FILTER (WHERE c."pipelineFirstContactedAt" >= c."pipelineLeadAt") AS "averageSpeedSeconds", SUM(${QUALIFIED_VALUE}) FILTER (WHERE c."pipelineQualifiedAt" IS NOT NULL) AS "qualifiedTotal", SUM(${CONVERTED_VALUE}) FILTER (WHERE c."pipelineConvertedAt" IS NOT NULL) AS "convertedTotal", SUM(${SOLD_VALUE}) FILTER (WHERE c."pipelineSoldAt" IS NOT NULL) AS "soldTotal" FROM "Customer" c WHERE ${where}`),
     prisma.$queryRaw<Array<{ source: string }>>(Prisma.sql`SELECT DISTINCT COALESCE(c."pipelineLeadSource", c."leadSource", c."attributionSource", c."attributionChannel", 'Unknown source') AS source FROM "Customer" c WHERE c."companyId" = ${companyId} AND c."givingProgramOnly" = false AND c."pipelineLeadAt" IS NOT NULL AND c."pipelineRemovedAt" IS NULL ${sourceScope} ORDER BY source`),
+    prisma.$queryRaw<Array<{ id: string; firstName: string; lastName: string; name: string }>>(Prisma.sql`
+      SELECT DISTINCT u.id, u."firstName", u."lastName", u.name
+      FROM "Estimate" e
+      LEFT JOIN "HolidayLightingQuote" hlq ON hlq."estimateId" = e.id
+      JOIN "User" u ON u.id = COALESCE(hlq."createdById", e."sentById")
+      WHERE e."companyId" = ${companyId}
+      ORDER BY u."firstName", u."lastName", u.name, u.id
+    `),
   ]);
   const raw = metricsRows[0];
   const metrics = { leadCount: Number(raw?.leadCount ?? 0), qualifiedCount: Number(raw?.qualifiedCount ?? 0), convertedCount: Number(raw?.convertedCount ?? 0), soldCount: Number(raw?.soldCount ?? 0), averageSpeedSeconds: raw?.averageSpeedSeconds == null ? null : Number(raw.averageSpeedSeconds), qualifiedTotal: Number(raw?.qualifiedTotal ?? 0), convertedTotal: Number(raw?.convertedTotal ?? 0), soldTotal: Number(raw?.soldTotal ?? 0) };
-  return { rows: rows.map(({ qualifiedEmployee, ...row }) => ({
-    ...row,
-    speedSeconds: pipelineSpeedSeconds(row),
-    qualifiedEmployeeName: qualifiedEmployee
-      ? employeeFirstNameLastInitial(qualifiedEmployee) || null
-      : null,
-  })), total: metrics.leadCount, metrics, leadSources: sourceRows.map((row) => row.source) };
+  return { rows: rows.map(serializePipelineRow), total: metrics.leadCount, metrics, leadSources: sourceRows.map((row) => row.source), salesRepresentatives: salesRepresentativeRows.map((row): PipelineSalesRepresentative => ({
+    id: row.id,
+    name: employeeFirstNameLastInitial(row) || row.name,
+  })) };
 }
 
 export async function exportSalesPipeline(companyId: string, filters: PipelineFilters, scope: PipelineScope = {}) {
   const where = pipelineWhere(companyId, filters, scope);
   const rows = await prisma.$queryRaw<PipelineRow[]>(Prisma.sql`${PIPELINE_SELECT} WHERE ${where} ORDER BY c."pipelineLeadAt" DESC, c.id ASC`);
-  return rows.map(({ qualifiedEmployee, ...row }) => ({
-    ...row,
-    speedSeconds: pipelineSpeedSeconds(row),
-    qualifiedEmployeeName: qualifiedEmployee
-      ? employeeFirstNameLastInitial(qualifiedEmployee) || null
-      : null,
-  }));
+  return rows.map(serializePipelineRow);
 }

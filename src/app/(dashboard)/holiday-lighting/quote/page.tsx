@@ -18,7 +18,22 @@ type QuoteRow = {
   updatedAt: string;
   customer?: { name: string } | null;
   estimate?: { estimateNumber: string | null } | null;
+  priceRange: { min: number; max: number } | null;
 };
+
+const money = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+});
+
+function formatPriceRange(range: QuoteRow["priceRange"]) {
+  if (!range) return null;
+  const minimum = money.format(range.min);
+  const maximum = money.format(range.max);
+  return range.min === range.max ? minimum : `${minimum}–${maximum}`;
+}
 
 export default function HolidayLightingQuoteListPage() {
   const { enabled } = useHolidayLightingFeatures();
@@ -105,8 +120,8 @@ export default function HolidayLightingQuoteListPage() {
           <Input
             value={searchInput}
             onChange={(event) => setSearchInput(event.target.value)}
-            placeholder="Search customer name"
-            aria-label="Search holiday lighting quotes by customer name"
+            placeholder="Search customer or address"
+            aria-label="Search holiday lighting quotes by customer name or address"
             className="pl-9 pr-9"
           />
           {searchInput ? (
@@ -114,7 +129,7 @@ export default function HolidayLightingQuoteListPage() {
               type="button"
               onClick={() => setSearchInput("")}
               className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-              aria-label="Clear customer search"
+              aria-label="Clear quote search"
             >
               <X className="h-4 w-4" aria-hidden="true" />
             </button>
@@ -162,6 +177,11 @@ export default function HolidayLightingQuoteListPage() {
                       {q.status}
                       {q.estimate?.estimateNumber ? ` · ${q.estimate.estimateNumber}` : ""}
                     </span>
+                    {q.priceRange ? (
+                      <span className="mt-1 block text-xs font-semibold text-foreground">
+                        {formatPriceRange(q.priceRange)}
+                      </span>
+                    ) : null}
                   </span>
                   <span className="text-xs text-muted-foreground">
                     {new Date(q.updatedAt).toLocaleDateString()}

@@ -8,13 +8,51 @@ import {
 import { assertHolidayLightingEnabled, loadHolidayCatalog } from "@/lib/holiday-lighting/catalog";
 import { ensureHolidayPriceBookItems } from "@/lib/holiday-lighting/price-book";
 import {
+  computeHolidayQuotePricing,
+  type PriceLookup,
+} from "@/lib/holiday-lighting/pricing";
+import {
   EMPTY_HOLIDAY_MEASUREMENTS,
   applyHolidayCatalogPolicy,
+  holidayDesignOptionsFromQuote,
   holidaySelectionsFromCatalog,
   parseHolidayMeasurements,
   parseHolidaySelections,
+  type HolidayLightingCatalog,
 } from "@/lib/holiday-lighting/types";
 import { prisma } from "@/lib/prisma";
+
+function calculateDraftPriceTotals(
+  measurementsValue: unknown,
+  selectionsValue: unknown,
+  catalog: HolidayLightingCatalog,
+  prices: PriceLookup
+) {
+  try {
+    const measurements = parseHolidayMeasurements(measurementsValue);
+    const selections = applyHolidayCatalogPolicy(
+      parseHolidaySelections(selectionsValue),
+      catalog
+    );
+    return holidayDesignOptionsFromQuote({ measurements, selections, catalog }).map((design) => {
+      const designSelections = applyHolidayCatalogPolicy(design.selections, catalog);
+      const style = catalog.lightStyles.find(
+        (item) => item.key === designSelections.defaultLightStyleKey
+      ) ?? catalog.lightStyles[0];
+      const pricing = computeHolidayQuotePricing({
+        catalog,
+        measurements: parseHolidayMeasurements(design.measurements),
+        selections: designSelections,
+        prices,
+      });
+      return style?.kind === "permanent"
+        ? pricing.optionDetails.permanent.total
+        : pricing.optionDetails.buy.total;
+    });
+  } catch {
+    return [];
+  }
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -27,6 +65,11 @@ export async function GET(request: NextRequest) {
 
     const customerId = request.nextUrl.searchParams.get("customerId");
     const search = request.nextUrl.searchParams.get("search")?.trim() ?? "";
+    const searchTerms = search
+      .split(/[\s,]+/)
+      .map((term) => term.trim())
+      .filter(Boolean)
+      .slice(0, 10);
     const page = Math.max(
       1,
       Math.min(100_000, Math.floor(Number(request.nextUrl.searchParams.get("page")) || 1))
@@ -38,8 +81,22 @@ export async function GET(request: NextRequest) {
     const where = {
       companyId: user.companyId,
       ...(customerId ? { customerId } : {}),
-      ...(search
-        ? { customer: { is: { name: { contains: search, mode: "insensitive" as const } } } }
+      ...(searchTerms.length
+        ? {
+            AND: searchTerms.map((term) => ({
+              OR: [
+                { customer: { is: { name: { contains: term, mode: "insensitive" as const } } } },
+                { address: { contains: term, mode: "insensitive" as const } },
+                { city: { contains: term, mode: "insensitive" as const } },
+                { state: { contains: term, mode: "insensitive" as const } },
+                { zip: { contains: term, mode: "insensitive" as const } },
+                { property: { is: { address: { contains: term, mode: "insensitive" as const } } } },
+                { property: { is: { city: { contains: term, mode: "insensitive" as const } } } },
+                { property: { is: { state: { contains: term, mode: "insensitive" as const } } } },
+                { property: { is: { zip: { contains: term, mode: "insensitive" as const } } } },
+              ],
+            })),
+          }
         : {}),
     };
     const [quotes, total] = await Promise.all([
@@ -50,12 +107,76 @@ export async function GET(request: NextRequest) {
         take: pageSize,
         include: {
           customer: { select: { id: true, name: true } },
-          estimate: { select: { id: true, estimateNumber: true, status: true } },
+          estimate: {
+            select: {
+              id: true,
+              estimateNumber: true,
+              status: true,
+              total: true,
+              options: {
+                where: { declinedAt: null },
+                select: { total: true },
+              },
+            },
+          },
         },
       }),
       prisma.holidayLightingQuote.count({ where }),
     ]);
-    return NextResponse.json({ quotes, total, page, pageSize });
+
+    const needsDraftPricing = quotes.some((quote) => {
+      const optionTotals = quote.estimate?.options ?? [];
+      return optionTotals.length === 0 && Number(quote.estimate?.total ?? 0) <= 0;
+    });
+    let draftPricing: { catalog: HolidayLightingCatalog; prices: PriceLookup } | null = null;
+    if (needsDraftPricing) {
+      const catalog = await loadHolidayCatalog(user.companyId);
+      const priceRows = await ensureHolidayPriceBookItems(user.companyId, catalog);
+      const prices: PriceLookup = new Map(
+        priceRows.map((row) => [
+          row.sku,
+          {
+            id: row.priceBookItemId ?? row.sku,
+            name: row.name,
+            unitPrice: row.unitPrice,
+            unitCost: row.unitCost,
+          },
+        ])
+      );
+      draftPricing = { catalog, prices };
+    }
+
+    const quotesWithPriceRange = quotes.map((quote) => {
+      const optionTotals = (quote.estimate?.options ?? [])
+        .map((option) => Number(option.total))
+        .filter((value) => Number.isFinite(value));
+      const estimateTotal = Number(quote.estimate?.total ?? 0);
+      let totals = optionTotals.length
+        ? optionTotals
+        : estimateTotal > 0
+          ? [estimateTotal]
+          : [];
+      if (!totals.length && draftPricing) {
+        totals = calculateDraftPriceTotals(
+          quote.measurements,
+          quote.selections,
+          draftPricing.catalog,
+          draftPricing.prices
+        );
+      }
+      const priceRange = totals.length
+        ? { min: Math.min(...totals), max: Math.max(...totals) }
+        : null;
+      const estimate = quote.estimate
+        ? {
+            id: quote.estimate.id,
+            estimateNumber: quote.estimate.estimateNumber,
+            status: quote.estimate.status,
+          }
+        : null;
+      return { ...quote, estimate, priceRange };
+    });
+    return NextResponse.json({ quotes: quotesWithPriceRange, total, page, pageSize });
   } catch (error) {
     if (error instanceof Error && error.message.includes("disabled")) {
       return forbiddenResponse(error.message);
