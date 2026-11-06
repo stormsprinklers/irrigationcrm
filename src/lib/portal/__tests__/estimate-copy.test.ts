@@ -99,7 +99,9 @@ test("public estimate normalizes private preview URLs and excludes internal note
     const view = serializePortalEstimate({
       id:"estimate",publicToken:"token",status:"SENT",total:100,subtotal:100,discountTotal:0,
       expiresAt:null,signedAt:null,signatureBlobUrl:null,createdAt:new Date(),
-      designExportMetadata:{source:"holiday-lighting-quote",recurringYearlyService:true,previewImageUrl:preview,notes:"Secret gate code",options:[{letter:"A",colorPattern:"Multicolor",notes:"Private staffing instructions",recurringYearlyService:true,cancellationFee:237.45}]},
+      customer:{name:"Taylor Customer",email:"taylor@example.com",phone:"801-555-0100"},
+      property:{address:"100 Holly Way",city:"Orem",state:"UT",zip:"84057"},
+      designExportMetadata:{source:"holiday-lighting-quote",recurringYearlyService:true,previewImageUrl:preview,notes:"Secret gate code",options:[{letter:"A",pricingMode:"buy",colorPattern:"Multicolor",notes:"Private staffing instructions",recurringYearlyService:true,cancellationFee:237.45,cancellationItems:[{id:"c9",name:"C9 bulbs",quantity:50,unitMsrp:4.749,total:237.45}]}]},
       options:[{id:"option",letter:"A",label:"Roofline",description:"Roofline lights\n\nCancel by paying the unmarked-up material cost\n\nSecret gate code\n\nPrivate staffing instructions",internalNotes:"Secret gate code",photoUrl:preview,sortOrder:0,subtotal:100,discountTotal:0,total:100}],
       lineItems:[{optionId:"option",name:"Roofline lighting",description:"C9 · Warm White · 100 ft",quantity:1,unitPrice:100,total:100,sortOrder:0}]
     }, "https://portal.chestnut.example");
@@ -112,6 +114,9 @@ test("public estimate normalizes private preview URLs and excludes internal note
     assert.equal(view.options[0].cancellationFee, 237.45);
     assert.equal(view.holidayRecurringService, true);
     assert.equal(view.options[0].recurringYearlyService, true);
+    assert.equal(view.options[0].subscriptionAgreement?.customerName, "Taylor Customer");
+    assert.equal(view.options[0].subscriptionAgreement?.propertyAddress, "100 Holly Way, Orem, UT, 84057");
+    assert.equal(view.options[0].subscriptionAgreement?.materials[0]?.manufacturerModel, "");
     assert.ok(!JSON.stringify(view).includes("Secret gate code"));
     assert.ok(!JSON.stringify(view).includes("Private staffing instructions"));
   } finally {
@@ -179,6 +184,7 @@ test("permanent lighting never exposes seasonal recurring terms or a cancellatio
 
   assert.equal(view.options[0]?.recurringYearlyService, false);
   assert.equal(view.options[0]?.cancellationFee, 0);
+  assert.equal(view.options[0]?.subscriptionAgreement, null);
   assert.equal(view.options[0]?.label, "Permanent Holiday Lighting Installation");
   assert.doesNotMatch(view.options[0]?.description ?? "", /recurring|cancellation fee/i);
   assert.match(view.options[0]?.description ?? "", /one-time permanent/i);

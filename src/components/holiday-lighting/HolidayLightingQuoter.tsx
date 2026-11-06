@@ -85,6 +85,7 @@ type HolidayPriceRow = {
   unitPrice: number;
   unitCost: number | null;
   priceBookItemId: string | null;
+  backendItems?: Array<{ id: string; name: string; quantity: number; contractorCost: number; msrp: number }>;
 };
 
 type Props = {
@@ -1413,7 +1414,7 @@ export function HolidayLightingQuoter({
       const unitPrice = !useCurrentPriceBook && Number.isFinite(entered) && entered >= 0
         ? Math.round(entered * 100) / 100
         : row.unitPrice;
-      return [row.sku, { unitPrice, unitCost: row.unitCost }];
+      return [row.sku, { unitPrice, unitCost: row.unitCost, backendItems: row.backendItems }];
     }));
     const nextSelections = { ...selections, pricingSnapshot };
     setSelections(nextSelections);

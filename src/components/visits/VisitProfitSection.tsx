@@ -28,8 +28,10 @@ export function VisitProfitSection({ visitId }: Props) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const controller = new AbortController();
+    const load = () => {
     setLoading(true);
-    fetch(`/api/visits/${visitId}/profit`)
+    fetch(`/api/visits/${visitId}/profit`, { signal: controller.signal })
       .then((r) => r.json())
       .then((data) => {
         if (data.error) {
@@ -38,8 +40,19 @@ export function VisitProfitSection({ visitId }: Props) {
         }
         setProfit(data);
       })
-      .catch(() => toast.error("Failed to load profit analysis"))
+      .catch((error) => {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          toast.error("Failed to load profit analysis");
+        }
+      })
       .finally(() => setLoading(false));
+    };
+    load();
+    window.addEventListener("visit-job-costs-updated", load);
+    return () => {
+      controller.abort();
+      window.removeEventListener("visit-job-costs-updated", load);
+    };
   }, [visitId]);
 
   if (loading) {
@@ -66,7 +79,7 @@ export function VisitProfitSection({ visitId }: Props) {
           <dd className="font-medium">{formatCurrency(profit.revenue)}</dd>
         </div>
         <div className="flex justify-between">
-          <dt className="text-muted-foreground">Line item costs</dt>
+          <dt className="text-muted-foreground">Material / line-item costs</dt>
           <dd>−{formatCurrency(profit.lineItemCost)}</dd>
         </div>
         <div className="flex justify-between">

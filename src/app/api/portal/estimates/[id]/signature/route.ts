@@ -23,6 +23,11 @@ import {
   withHolidayLeaseCommitmentDescription,
   type HolidayLeaseCommitmentYears,
 } from "@/lib/holiday-lighting/lease-commitment";
+import {
+  buildHolidaySubscriptionAgreement,
+  isSeasonalHolidaySubscriptionOption,
+} from "@/lib/holiday-lighting/subscription-agreement";
+import { buildHolidaySubscriptionAgreementPdf } from "@/lib/holiday-lighting/subscription-agreement-pdf";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -161,6 +166,9 @@ export async function POST(request: NextRequest, { params }: Params) {
     ? holidayOptionMetadata(designExportMetadata, selectedOption)
     : null;
   const selectedOptionIsLease = selectedHolidayMetadata?.pricingMode === "lease";
+  const selectedOptionIsSeasonalSubscription = isSeasonalHolidaySubscriptionOption(
+    selectedHolidayMetadata
+  );
   if (requestedLeaseContractYears != null && !selectedOptionIsLease) {
     return NextResponse.json(
       { error: "Lease commitments are available only for leased lights" },
@@ -172,6 +180,11 @@ export async function POST(request: NextRequest, { params }: Params) {
   const mimeMatch = header.match(/data:(image\/\w+);base64/);
   const mimeType = mimeMatch?.[1] ?? "image/png";
   const buffer = Buffer.from(base64Data, "base64");
+  if (!buffer.length || buffer.length > 2 * 1024 * 1024) {
+    return NextResponse.json({ error: "Signature image is invalid or too large" }, { status: 400 });
+  }
+
+  const signatureAcceptedAt = new Date();
 
   const blob = await uploadPrivateBlob(
     `estimates/${companyId}/${estimateId}/signature-${Date.now()}.png`,
@@ -194,6 +207,9 @@ export async function POST(request: NextRequest, { params }: Params) {
     type: string;
     amount: number;
   }> = [];
+  let agreementAttachment:
+    | { blobUrl: string; fileName: string; uploadedById: string }
+    | null = null;
 
   if (selectedOption) {
     subtotal = toNumber(selectedOption.subtotal);
@@ -236,7 +252,121 @@ export async function POST(request: NextRequest, { params }: Params) {
     discountTotal = 0;
   }
 
+  if (selectedOption && selectedOptionIsSeasonalSubscription) {
+    const agreementRecord = await prisma.estimate.findUnique({
+      where: { id: estimateId },
+      select: {
+        estimateNumber: true,
+        createdAt: true,
+        sentById: true,
+        holidayLightingQuote: { select: { createdById: true } },
+        customer: {
+          select: {
+            name: true,
+            email: true,
+            phone: true,
+            address: true,
+            city: true,
+            state: true,
+            zip: true,
+          },
+        },
+        property: { select: { address: true, city: true, state: true, zip: true } },
+        visit: { select: { startAt: true } },
+        lineItems: {
+          where: { OR: [{ optionId: null }, { optionId: selectedOption.id }] },
+          select: { optionId: true, name: true, unit: true, total: true },
+        },
+      },
+    });
+    if (!agreementRecord) return portalNotFoundResponse();
+    const agreement = buildHolidaySubscriptionAgreement({
+      estimateNumber: agreementRecord.estimateNumber,
+      selectedOptionId: selectedOption.id,
+      optionLabel: selectedOption.label,
+      optionTotal: total,
+      optionMetadata: selectedHolidayMetadata,
+      lineItems: agreementRecord.lineItems.map((item) => ({
+        ...item,
+        total: toNumber(item.total),
+      })),
+      customer: agreementRecord.customer,
+      property: agreementRecord.property,
+      addressFallback:
+        nextMetadata && typeof nextMetadata === "object" && !Array.isArray(nextMetadata) &&
+        typeof (nextMetadata as Record<string, unknown>).address === "string"
+          ? ((nextMetadata as Record<string, unknown>).address as string)
+          : null,
+      createdAt: agreementRecord.createdAt,
+      effectiveAt: signatureAcceptedAt,
+      installationAt: agreementRecord.visit?.startAt,
+      promotionalPhotoConsent: true,
+    });
+    const fallbackUploader =
+      agreementRecord.sentById || agreementRecord.holidayLightingQuote?.createdById
+        ? null
+        : await prisma.user.findFirst({
+            where: { companyId, status: "ACTIVE" },
+            orderBy: { createdAt: "asc" },
+            select: { id: true },
+          });
+    const uploadedById =
+      agreementRecord.sentById ??
+      agreementRecord.holidayLightingQuote?.createdById ??
+      fallbackUploader?.id;
+    if (!uploadedById) {
+      return NextResponse.json(
+        { error: "No company user is available to store the signed agreement" },
+        { status: 503 }
+      );
+    }
+    const agreementPdf = await buildHolidaySubscriptionAgreementPdf({
+      agreement,
+      signatureImage: buffer,
+      signedAt: signatureAcceptedAt,
+      companyName: "Chestnut & Cheer",
+    });
+    const safeEstimateNumber = agreement.estimateNumber.replace(/[^a-zA-Z0-9._-]/g, "-");
+    const agreementFileName = `Holiday Lighting Subscription Agreement - ${agreement.estimateNumber}.pdf`;
+    const agreementBlob = await uploadPrivateBlob(
+      `customers/${companyId}/${customerId}/${signatureAcceptedAt.getTime()}-holiday-subscription-agreement-${safeEstimateNumber}.pdf`,
+      agreementPdf,
+      { contentType: "application/pdf" }
+    );
+    agreementAttachment = {
+      blobUrl: agreementBlob.url,
+      fileName: agreementFileName,
+      uploadedById,
+    };
+    const metadataRoot =
+      nextMetadata && typeof nextMetadata === "object" && !Array.isArray(nextMetadata)
+        ? (nextMetadata as Record<string, unknown>)
+        : {};
+    nextMetadata = {
+      ...metadataRoot,
+      subscriptionAgreementAcceptance: {
+        acceptedAt: signatureAcceptedAt.toISOString(),
+        selectedOptionId: selectedOption.id,
+        promotionalPhotoConsent: true,
+        pdfBlobUrl: agreementBlob.url,
+        agreement,
+      },
+    };
+  }
+
   const updated = await prisma.$transaction(async (tx) => {
+    if (agreementAttachment) {
+      await tx.customerAttachment.create({
+        data: {
+          customerId,
+          uploadedById: agreementAttachment.uploadedById,
+          blobUrl: agreementAttachment.blobUrl,
+          fileName: agreementAttachment.fileName,
+          mimeType: "application/pdf",
+        },
+      });
+    }
+
     if (selectedOption && selectedLeaseYears && selectedLeasePricing) {
       const oldCommitmentDiscountIds = selectedDiscounts
         .filter(
@@ -294,7 +424,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       where: { id: estimateId },
       data: {
         signatureBlobUrl: blob.url,
-        signedAt: new Date(),
+        signedAt: signatureAcceptedAt,
         // Acceptance is recorded now, but the estimate remains SENT until Stripe
         // confirms either a payment or a saved card.
         approvedAt: null,

@@ -1,6 +1,7 @@
 import type {
   HolidayLightingCatalog,
   HolidayMeasurements,
+  HolidayBackendCostItem,
   HolidayCustomService,
   HolidayQuoteSelections,
   HolidayQuoteOptionKey,
@@ -10,8 +11,18 @@ import { billedSegmentLengthFt } from "./pitch-match";
 
 export type PriceLookup = Map<
   string,
-  { id: string; name: string; unitPrice: number; unitCost: number | null }
+  { id: string; name: string; unitPrice: number; unitCost: number | null; backendItems?: HolidayBackendCostItem[] }
 >;
+
+export type HolidayCalculatedBackendItem = {
+  id: string;
+  name: string;
+  quantity: number;
+  contractorCost: number;
+  msrp: number;
+  contractorTotal: number;
+  msrpTotal: number;
+};
 
 export type HolidayPricedLine = {
   key: string;
@@ -61,6 +72,9 @@ export type HolidayPricingResult = {
   customServicesTotal: number;
   /** Material cost due if a seasonal recurring service is cancelled. */
   cancellationFee: number;
+  /** Itemized materials retained for cancellation agreements and visit job costing. */
+  backendCostItems: HolidayCalculatedBackendItem[];
+  contractorMaterialCost: number;
 };
 
 function money(n: number) {
@@ -143,7 +157,43 @@ export function computeHolidayQuotePricing(params: {
   const billedLengthFt = totalBilledLengthFt(measurements);
   let serviceSubtotal = 0;
   let cancellationFee = 0;
+  let contractorMaterialCost = 0;
+  const backendCostItems = new Map<string, HolidayCalculatedBackendItem>();
   const lines: HolidayPricedLine[] = [];
+
+  function addBackendCosts(price: ReturnType<typeof lookup>, scopeQuantity: number) {
+    if (!price || scopeQuantity <= 0) return { msrp: 0, contractor: 0 };
+    const components = price.backendItems?.length
+      ? price.backendItems
+      : [{ id: `${price.id}-legacy`, name: `${price.name} materials`, quantity: 1, contractorCost: price.unitCost ?? 0, msrp: price.unitCost ?? 0 }];
+    let msrp = 0;
+    let contractor = 0;
+    for (const component of components) {
+      const quantity = money(scopeQuantity * component.quantity);
+      const contractorTotal = money(quantity * component.contractorCost);
+      const msrpTotal = money(quantity * component.msrp);
+      contractor += contractorTotal;
+      msrp += msrpTotal;
+      const key = `${component.id}:${component.contractorCost}:${component.msrp}`;
+      const current = backendCostItems.get(key);
+      backendCostItems.set(key, current ? {
+        ...current,
+        quantity: money(current.quantity + quantity),
+        contractorTotal: money(current.contractorTotal + contractorTotal),
+        msrpTotal: money(current.msrpTotal + msrpTotal),
+      } : {
+        id: component.id,
+        name: component.name,
+        quantity,
+        contractorCost: component.contractorCost,
+        msrp: component.msrp,
+        contractorTotal,
+        msrpTotal,
+      });
+    }
+    contractorMaterialCost += contractor;
+    return { msrp: money(msrp), contractor: money(contractor) };
+  }
 
   for (const segment of measurements.segments) {
     const lengthFt = billedSegmentLengthFt(segment);
@@ -155,7 +205,7 @@ export function computeHolidayQuotePricing(params: {
       : segmentStyle?.partsSku ?? segmentStyle?.temporaryYear1Sku;
     const price = lookup(prices, sku);
     const serviceTotal = money(lengthFt * (price?.unitPrice ?? 0));
-    const materialCost = money(lengthFt * (price?.unitCost ?? 0));
+    const materialCost = addBackendCosts(price, lengthFt).msrp;
     serviceSubtotal += serviceTotal;
     cancellationFee += materialCost;
     lines.push({
@@ -188,7 +238,7 @@ export function computeHolidayQuotePricing(params: {
       ?? (difficulty === 2 ? 1.25 : difficulty === 3 ? 1.5 : 1);
     const amount = money((item?.unitPrice ?? 0) * strandCount * difficultyMultiplier);
     // Difficulty changes the work price, not the amount of material purchased.
-    const materialCost = money((item?.unitCost ?? 0) * strandCount);
+    const materialCost = addBackendCosts(item, strandCount).msrp;
     serviceSubtotal += amount;
     cancellationFee += materialCost;
     lines.push({
@@ -220,10 +270,13 @@ export function computeHolidayQuotePricing(params: {
       0
     )
   );
-  cancellationFee += additionalItems.reduce(
-    (sum, service) => sum + service.quantity * (service.unitCost ?? 0),
-    0
-  );
+  for (const service of additionalItems) {
+    const item = lookup(prices, service.sku);
+    cancellationFee += item
+      ? addBackendCosts(item, service.quantity).msrp
+      : money(service.quantity * (service.unitCost ?? 0));
+    if (!item) contractorMaterialCost += money(service.quantity * (service.unitCost ?? 0));
+  }
   // Permanent lighting is a one-time installed system, not a recurring seasonal
   // service. Its backend material cost remains on the price-book row for internal
   // costing, but it must never become a customer cancellation fee.
@@ -284,6 +337,8 @@ export function computeHolidayQuotePricing(params: {
     calculatedReinstallTotal: calculatedServiceTotal,
     customServicesTotal,
     cancellationFee,
+    backendCostItems: [...backendCostItems.values()],
+    contractorMaterialCost: money(contractorMaterialCost),
   };
 }
 

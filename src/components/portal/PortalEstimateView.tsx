@@ -11,6 +11,8 @@ import { EstimateOptionPresentCards, defaultPresentOptionId } from "@/components
 import { DesignZoneViewer } from "@/components/design/DesignZoneViewer";
 import { PortalShell } from "./PortalShell";
 import { EstimateVslGate } from "./EstimateVslGate";
+import { HolidaySubscriptionAgreementDialog } from "@/components/holiday-lighting/HolidaySubscriptionAgreementDialog";
+import type { HolidaySubscriptionAgreementData } from "@/lib/holiday-lighting/subscription-agreement";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import { hasPermanentLightingOption } from "@/lib/estimates/permanent-lighting";
 import { isEstimateCheckoutReturn } from "@/lib/portal/estimate-vsl";
@@ -78,6 +80,7 @@ type Estimate = {
     pricingMode?: string | null;
     recurringYearlyService?: boolean;
     cancellationFee?: number;
+    subscriptionAgreement?: HolidaySubscriptionAgreementData | null;
     leaseContractYears?: HolidayLeaseCommitmentYears | null;
     subtotal: number;
     discountTotal: number;
@@ -172,6 +175,7 @@ export function PortalEstimateView({
     "confirming" | "paid" | "card-saved" | null
   >(null);
   const [cancellationPolicyOpen, setCancellationPolicyOpen] = useState(false);
+  const [subscriptionAgreementOpen, setSubscriptionAgreementOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -393,6 +397,14 @@ export function PortalEstimateView({
     if (!displayOptions.length) return null;
     return displayOptions.find((o) => o.id === selectedOptionId) ?? displayOptions[0] ?? null;
   }, [displayOptions, selectedOptionId]);
+  const activeSubscriptionAgreement = activeOption?.subscriptionAgreement
+    ? {
+        ...activeOption.subscriptionAgreement,
+        annualSubscriptionFee: activeOption.total,
+        bookingDeposit: Math.round(activeOption.total * 50) / 100,
+        installationPayment: Math.round(activeOption.total * 50) / 100,
+      }
+    : null;
 
   function displayTotal() {
     if (!estimate) return 0;
@@ -865,7 +877,22 @@ export function PortalEstimateView({
                   . A card must be saved on file to approve this holiday lighting estimate.{" "}
                 </>
               ) : null}
-              By signing, you acknowledge that you understand our{" "}
+              {activeSubscriptionAgreement ? (
+                <>
+                  By signing, you agree to the seasonal holiday lighting{" "}
+                  <button
+                    type="button"
+                    className="font-medium text-[#4C9BC8] underline underline-offset-2"
+                    onClick={() => setSubscriptionAgreementOpen(true)}
+                  >
+                    terms and conditions
+                  </button>
+                  .{" "}
+                </>
+              ) : null}
+              {activeSubscriptionAgreement
+                ? "You also acknowledge that you understand our "
+                : "By signing, you acknowledge that you understand our "}
               <LegalDocLink href={company.termsOfServiceUrl}>Terms of Service</LegalDocLink>,{" "}
               <LegalDocLink href={company.privacyPolicyUrl}>Privacy Policy</LegalDocLink>, and
               the scope of work being approved.
@@ -912,6 +939,14 @@ export function PortalEstimateView({
           </p>
         ) : null}
       </div>
+      {activeSubscriptionAgreement ? (
+        <HolidaySubscriptionAgreementDialog
+          open={subscriptionAgreementOpen}
+          onClose={() => setSubscriptionAgreementOpen(false)}
+          agreement={activeSubscriptionAgreement}
+          companyName={company.name}
+        />
+      ) : null}
       {requiresHolidayCard && cancellationPolicyOpen ? (
         <div className="fixed inset-0 z-[300] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="holiday-cancellation-title">
           <button

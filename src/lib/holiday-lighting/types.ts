@@ -117,6 +117,7 @@ export type HolidayQuoteSelections = {
 export type HolidayPricingSnapshot = Record<string, {
   unitPrice: number;
   unitCost: number | null;
+  backendItems?: HolidayBackendCostItem[];
 }>;
 
 export type HolidayPhotoStroke = {
@@ -261,6 +262,18 @@ export type HolidayPriceBookRow = HolidayCatalogSku & {
   unitPrice: number;
   unitCost: number | null;
   priceBookItemId: string | null;
+  backendItems: HolidayBackendCostItem[];
+  backendItemsConfigured: boolean;
+  contractorCost: number;
+  cancellationMsrp: number;
+};
+
+export type HolidayBackendCostItem = {
+  id: string;
+  name: string;
+  quantity: number;
+  contractorCost: number;
+  msrp: number;
 };
 
 const PRELIT_MOUNTING_NOTE =
@@ -875,7 +888,7 @@ export function parseHolidayPricingSnapshot(raw: unknown): HolidayPricingSnapsho
   const entries = Object.entries(raw as Record<string, unknown>).slice(0, 250).flatMap(([rawSku, rawValue]) => {
     const sku = rawSku.trim().slice(0, 120);
     if (!sku || !rawValue || typeof rawValue !== "object" || Array.isArray(rawValue)) return [];
-    const value = rawValue as { unitPrice?: unknown; unitCost?: unknown };
+    const value = rawValue as { unitPrice?: unknown; unitCost?: unknown; backendItems?: unknown };
     const unitPrice = Number(value.unitPrice);
     const unitCost = value.unitCost == null ? null : Number(value.unitCost);
     if (!Number.isFinite(unitPrice) || unitPrice < 0 || unitPrice > 9_999_999) return [];
@@ -883,6 +896,22 @@ export function parseHolidayPricingSnapshot(raw: unknown): HolidayPricingSnapsho
     return [[sku, {
       unitPrice: Math.round(unitPrice * 100) / 100,
       unitCost: unitCost == null ? null : Math.round(unitCost * 100) / 100,
+      ...(Array.isArray(value.backendItems) ? { backendItems: value.backendItems.slice(0, 50).flatMap((rawItem, index) => {
+        if (!rawItem || typeof rawItem !== "object" || Array.isArray(rawItem)) return [];
+        const item = rawItem as Partial<HolidayBackendCostItem>;
+        const name = typeof item.name === "string" ? item.name.trim().slice(0, 160) : "";
+        const quantity = Number(item.quantity);
+        const contractorCost = Number(item.contractorCost);
+        const msrp = Number(item.msrp);
+        if (!name || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(contractorCost) || contractorCost < 0 || !Number.isFinite(msrp) || msrp < 0) return [];
+        return [{
+          id: typeof item.id === "string" && item.id.trim() ? item.id.trim().slice(0, 120) : `component-${index + 1}`,
+          name,
+          quantity: Math.round(Math.min(quantity, 100000) * 1000) / 1000,
+          contractorCost: Math.round(Math.min(contractorCost, 9_999_999) * 100) / 100,
+          msrp: Math.round(Math.min(msrp, 9_999_999) * 100) / 100,
+        }];
+      }) } : {}),
     }] as const];
   });
   return entries.length ? Object.fromEntries(entries) : undefined;

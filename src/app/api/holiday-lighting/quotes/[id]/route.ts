@@ -33,6 +33,7 @@ function serializePrices(prices: Awaited<ReturnType<typeof loadHolidayPriceLooku
     unitPrice: item.unitPrice,
     unitCost: item.unitCost,
     priceBookItemId: item.id,
+    backendItems: item.backendItems ?? [],
   }));
 }
 

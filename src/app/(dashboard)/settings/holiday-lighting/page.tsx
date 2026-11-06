@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
+import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -52,6 +53,35 @@ export default function HolidayLightingCatalogSettingsPage() {
     setPrices((prev) => prev.map((row) => (row.sku === sku ? { ...row, ...patch } : row)));
   }
 
+  function addBackendItem(sku: string) {
+    setPrices((previous) => previous.map((row) => row.sku === sku ? {
+      ...row,
+      backendItemsConfigured: true,
+      backendItems: [...row.backendItems, {
+        id: `new-${crypto.randomUUID()}`,
+        name: "",
+        quantity: 1,
+        contractorCost: 0,
+        msrp: 0,
+      }],
+    } : row));
+  }
+
+  function patchBackendItem(sku: string, id: string, patch: Partial<HolidayPriceBookRow["backendItems"][number]>) {
+    setPrices((previous) => previous.map((row) => row.sku === sku ? {
+      ...row,
+      backendItems: row.backendItems.map((item) => item.id === id ? { ...item, ...patch } : item),
+    } : row));
+  }
+
+  function removeBackendItem(sku: string, id: string) {
+    setPrices((previous) => previous.map((row) => row.sku === sku ? {
+      ...row,
+      backendItemsConfigured: true,
+      backendItems: row.backendItems.filter((item) => item.id !== id),
+    } : row));
+  }
+
   function patchDifficultyMultiplier(difficulty: HolidayDifficulty, value: number) {
     setCatalog({
       ...catalog,
@@ -76,6 +106,8 @@ export default function HolidayLightingCatalogSettingsPage() {
             sku: row.sku,
             unitPrice: row.unitPrice,
             unitCost: row.unitCost,
+            backendItems: row.backendItems,
+            backendItemsConfigured: row.backendItemsConfigured,
           })),
         }),
       });
@@ -111,7 +143,7 @@ export default function HolidayLightingCatalogSettingsPage() {
       <PageHeader
         breadcrumb={["Settings", "Holiday lighting"]}
         title="Holiday lighting"
-        subtitle="Set seasonal service pricing, permanent installation pricing, backend costs, job minimums, and tree/bush difficulty multipliers."
+        subtitle="Set outward pricing, itemized cancellation MSRP and contractor costs, job minimums, and tree/bush difficulty multipliers."
         actions={
           <Button size="sm" onClick={() => void save()} disabled={saving || loading}>
             {saving ? "Saving…" : "Save"}
@@ -196,7 +228,7 @@ export default function HolidayLightingCatalogSettingsPage() {
           <section className="rounded-lg border border-border bg-white p-4">
             <h3 className="text-sm font-semibold">Price book SKUs</h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              C9, C7, and LightStream seasonal service plus permanent installation are priced per foot. Trees and bushes have one price per strand. Backend cost is the seasonal cancellation-fee basis; for permanent lighting it is internal job cost only.
+              Each priced service can include multiple backend materials. MSRP builds the customer cancellation fee; contractor cost is internal and feeds visit job costing. Permanent-lighting materials are used only for internal job costing.
             </p>
             <div className="mt-3 overflow-x-auto">
               <table className="w-full text-sm">
@@ -204,31 +236,28 @@ export default function HolidayLightingCatalogSettingsPage() {
                   <tr className="border-b text-left text-xs text-muted-foreground">
                     <th className="py-2 pr-2 font-medium">Item</th>
                     <th className="py-2 pr-2 font-medium">SKU</th>
-                    <th className="py-2 pr-2 font-medium">Backend material cost</th>
+                    <th className="py-2 pr-2 font-medium">Contractor total</th>
+                    <th className="py-2 pr-2 font-medium">Cancellation MSRP</th>
                     <th className="py-2 font-medium">Outward customer price</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {prices.map((row) => (
-                    <tr key={row.sku} className="border-b last:border-0">
+                  {prices.map((row) => {
+                    const contractorTotal = row.backendItems.length
+                      ? row.backendItems.reduce((sum, item) => sum + item.quantity * item.contractorCost, 0)
+                      : Number(row.unitCost ?? 0);
+                    const msrpTotal = row.backendItems.length
+                      ? row.backendItems.reduce((sum, item) => sum + item.quantity * item.msrp, 0)
+                      : Number(row.unitCost ?? 0);
+                    return <Fragment key={row.sku}>
+                    <tr className="border-b">
                       <td className="py-2 pr-2">
                         {row.name}
                         <span className="ml-1 text-xs text-muted-foreground">/{row.unit}</span>
                       </td>
                       <td className="py-2 pr-2 font-mono text-xs">{row.sku}</td>
-                      <td className="py-2 pr-2">
-                        <input
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          className="w-24 rounded-md border border-input px-2 py-1 text-sm"
-                          value={row.unitCost ?? 0}
-                          onChange={(e) => {
-                            if (e.target.value === "") return;
-                            patchPrice(row.sku, { unitCost: Number(e.target.value) });
-                          }}
-                        />
-                      </td>
+                      <td className="py-2 pr-2 font-medium">${contractorTotal.toFixed(2)}</td>
+                      <td className="py-2 pr-2 font-medium">${msrpTotal.toFixed(2)}</td>
                       <td className="py-2">
                         <input
                           type="number"
@@ -243,7 +272,33 @@ export default function HolidayLightingCatalogSettingsPage() {
                         />
                       </td>
                     </tr>
-                  ))}
+                    <tr className="border-b bg-muted/20 last:border-0">
+                      <td colSpan={5} className="px-3 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-xs font-semibold">Backend materials per {row.unit}</p>
+                            {!row.backendItems.length ? <p className="text-xs text-muted-foreground">No itemized materials yet. The legacy flat backend cost is ${Number(row.unitCost ?? 0).toFixed(2)}.</p> : null}
+                          </div>
+                          <Button type="button" size="sm" variant="outline" onClick={() => addBackendItem(row.sku)}>
+                            <Plus className="h-3.5 w-3.5" /> Add material
+                          </Button>
+                        </div>
+                        {row.backendItems.length ? <div className="mt-3 space-y-2">
+                          <div className="hidden grid-cols-[minmax(140px,1fr)_90px_120px_120px_36px] gap-2 text-[11px] font-medium text-muted-foreground sm:grid">
+                            <span>Material</span><span>Quantity</span><span>Contractor cost</span><span>MSRP</span><span />
+                          </div>
+                          {row.backendItems.map((item) => <div key={item.id} className="grid gap-2 rounded-md border bg-white p-2 sm:grid-cols-[minmax(140px,1fr)_90px_120px_120px_36px]">
+                            <input className="h-9 rounded-md border border-input px-2 text-sm" placeholder="Bulbs, timer, clips…" value={item.name} onChange={(event) => patchBackendItem(row.sku, item.id, { name: event.target.value })} />
+                            <input className="h-9 rounded-md border border-input px-2 text-sm" type="number" min={0.001} step="0.001" value={item.quantity} onChange={(event) => event.target.value !== "" && patchBackendItem(row.sku, item.id, { quantity: Number(event.target.value) })} />
+                            <input className="h-9 rounded-md border border-input px-2 text-sm" type="number" min={0} step="0.01" value={item.contractorCost} onChange={(event) => event.target.value !== "" && patchBackendItem(row.sku, item.id, { contractorCost: Number(event.target.value) })} />
+                            <input className="h-9 rounded-md border border-input px-2 text-sm" type="number" min={0} step="0.01" value={item.msrp} onChange={(event) => event.target.value !== "" && patchBackendItem(row.sku, item.id, { msrp: Number(event.target.value) })} />
+                            <Button type="button" variant="ghost" size="icon" aria-label={`Remove ${item.name || "material"}`} onClick={() => removeBackendItem(row.sku, item.id)}><Trash2 className="h-4 w-4" /></Button>
+                          </div>)}
+                        </div> : null}
+                      </td>
+                    </tr>
+                    </Fragment>;
+                  })}
                 </tbody>
               </table>
             </div>

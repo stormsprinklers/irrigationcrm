@@ -21,7 +21,11 @@ type Props = {
 export default async function PortalEstimatePage({ params, searchParams }: Props) {
   const { slug, token } = await params;
   const { preview, previewToken } = await searchParams;
-  if (!(await getCompanyByPortalSlug(slug))) notFound();
+  const isDevelopmentPreview =
+    process.env.NODE_ENV === "development" &&
+    slug === "holiday-terms-preview" &&
+    token === "sample";
+  if (!isDevelopmentPreview && !(await getCompanyByPortalSlug(slug))) notFound();
   return (
     <PortalEstimateView
       slug={slug}

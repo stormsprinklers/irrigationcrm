@@ -108,6 +108,9 @@ export function holidayVisitPlan(raw: Prisma.JsonValue | null, letter?: string |
     ...(typeof chosen?.colorPattern === "string" ? { colorPattern: chosen.colorPattern } : {}),
     ...(typeof chosen?.strandColor === "string" ? { strandColor: chosen.strandColor } : {}),
     ...(typeof chosen?.billedLengthFt === "number" ? { billedLengthFt: chosen.billedLengthFt } : {}),
+    ...(Array.isArray(chosen?.contractorCostItems) ? { contractorCostItems: chosen.contractorCostItems as Prisma.InputJsonArray } : {}),
+    ...(typeof chosen?.contractorMaterialCost === "number" ? { contractorMaterialCost: chosen.contractorMaterialCost } : {}),
+    ...(Array.isArray(chosen?.cancellationItems) ? { cancellationItems: chosen.cancellationItems as Prisma.InputJsonArray } : {}),
     ...(chosen?.previewImageUrl ? {previewImageUrl: chosen.previewImageUrl} : {}),
     ...(map && typeof map === "object" && !Array.isArray(map) ? {strandMap: {
       ...map as Prisma.InputJsonObject,

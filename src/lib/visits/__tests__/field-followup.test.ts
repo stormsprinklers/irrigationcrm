@@ -73,6 +73,22 @@ test("visit plan uses approved option B and preserves its internal job specs", (
   assert.equal(holidayVisitPlan({source: "irrigation-design"}), null);
 });
 
+test("visit plan carries approved contractor and cancellation itemization", () => {
+  const plan = holidayVisitPlan({
+    source: "holiday-lighting-quote",
+    options: [{
+      letter: "A",
+      contractorMaterialCost: 42,
+      contractorCostItems: [{ id: "bulbs", name: "Bulbs", quantity: 100, unitCost: 0.42, total: 42 }],
+      cancellationItems: [{ id: "bulbs", name: "Bulbs", quantity: 100, unitMsrp: 0.8, total: 80 }],
+    }],
+  }, "A")!;
+
+  assert.equal(plan.contractorMaterialCost, 42);
+  assert.deepEqual(plan.contractorCostItems, [{ id: "bulbs", name: "Bulbs", quantity: 100, unitCost: 0.42, total: 42 }]);
+  assert.deepEqual(plan.cancellationItems, [{ id: "bulbs", name: "Bulbs", quantity: 100, unitMsrp: 0.8, total: 80 }]);
+});
+
 test("visit plan keeps only the approved option's material notes", () => {
   const raw = {source: "holiday-lighting-quote", notes: "Option A notes", options: [
     {letter: "A", notes: "Option A notes"},

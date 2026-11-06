@@ -29,6 +29,7 @@ export async function loadHolidayPriceLookup(companyId: string): Promise<PriceLo
       name: item.name,
       unitPrice: item.unitPrice,
       unitCost: item.unitCost,
+      backendItems: item.backendItems,
     });
   }
   return map;

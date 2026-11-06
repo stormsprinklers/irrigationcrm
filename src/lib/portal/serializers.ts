@@ -16,6 +16,11 @@ import {
 } from "@/lib/estimates/customer-facing-lines";
 import { absolutePublicBlobUrl, estimateOptionPhotoUrl } from "@/lib/blob/urls";
 import { getPortalInvoiceDisplay } from "./invoice-display";
+import {
+  buildHolidaySubscriptionAgreement,
+  isSeasonalHolidaySubscriptionOption,
+  type HolidaySubscriptionAgreementData,
+} from "@/lib/holiday-lighting/subscription-agreement";
 
 function customerFacingHolidayDescription(description: string | null) {
   return hideHolidayFootage(
@@ -213,6 +218,21 @@ export function serializePortalEstimate(estimate: {
     startAt: Date | null;
     endAt: Date | null;
     assignedUser?: { name: string; photoUrl: string | null; title: string | null } | null;
+  } | null;
+  customer?: {
+    name?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    address?: string | null;
+    city?: string | null;
+    state?: string | null;
+    zip?: string | null;
+  } | null;
+  property?: {
+    address?: string | null;
+    city?: string | null;
+    state?: string | null;
+    zip?: string | null;
   } | null;
   company?: {
     estimateWarrantyText?: string | null;
@@ -464,6 +484,51 @@ export function serializePortalEstimate(estimate: {
       }
     : null;
 
+  const acceptance =
+    meta?.subscriptionAgreementAcceptance &&
+    typeof meta.subscriptionAgreementAcceptance === "object" &&
+    !Array.isArray(meta.subscriptionAgreementAcceptance)
+      ? (meta.subscriptionAgreementAcceptance as Record<string, unknown>)
+      : null;
+  const acceptedAgreement =
+    acceptance?.agreement &&
+    typeof acceptance.agreement === "object" &&
+    !Array.isArray(acceptance.agreement)
+      ? (acceptance.agreement as HolidaySubscriptionAgreementData)
+      : null;
+  const optionsWithAgreement = options.map((option, index) => {
+    const optionMetadata = holidayMetadataOptions.find((item) => item.letter === option.letter) ??
+      holidayMetadataOptions[index];
+    if (!isHolidayLightingQuote || !isSeasonalHolidaySubscriptionOption(optionMetadata)) {
+      return { ...option, subscriptionAgreement: null };
+    }
+    const saved =
+      acceptedAgreement && acceptedAgreement.selectedOptionId === option.id
+        ? acceptedAgreement
+        : null;
+    return {
+      ...option,
+      subscriptionAgreement: saved ?? buildHolidaySubscriptionAgreement({
+        estimateNumber: estimate.estimateNumber,
+        selectedOptionId: option.id,
+        optionLabel: option.label,
+        optionTotal: option.total,
+        optionMetadata,
+        lineItems,
+        customer: estimate.customer,
+        property: estimate.property,
+        addressFallback: typeof meta?.address === "string" ? meta.address : null,
+        createdAt: estimate.createdAt,
+        effectiveAt: estimate.signedAt,
+        installationAt: estimate.visit?.startAt,
+        promotionalPhotoConsent:
+          typeof acceptance?.promotionalPhotoConsent === "boolean"
+            ? acceptance.promotionalPhotoConsent
+            : true,
+      }),
+    };
+  });
+
   return {
     id: estimate.id,
     estimateNumber: estimate.estimateNumber ?? null,
@@ -500,7 +565,7 @@ export function serializePortalEstimate(estimate: {
         ? toNumber(estimate.premiumOptionTotal as never)
         : null,
     selectedQuoteTier: estimate.selectedQuoteTier ?? null,
-    options,
+    options: optionsWithAgreement,
     lineItems,
     discounts,
     visit,

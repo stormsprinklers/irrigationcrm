@@ -152,6 +152,24 @@ export class SimplePdf {
     }
   }
 
+  addBoldBody(text: string) {
+    for (const paragraph of ascii(text).split(/\n+/)) {
+      for (const line of wrapLine(paragraph, 88)) {
+        this.ensure(14);
+        this.page().ops.push(
+          "BT",
+          `/F2 10 Tf`,
+          "0.07 0.09 0.12 rg",
+          `1 0 0 1 ${MARGIN} ${this.y - 11} Tm`,
+          `(${pdfEscape(line)}) Tj`,
+          "ET"
+        );
+        this.y -= 14;
+      }
+      this.y -= 4;
+    }
+  }
+
   addRule() {
     this.ensure(12);
     this.page().ops.push(
@@ -160,6 +178,10 @@ export class SimplePdf {
       `${MARGIN} ${this.y} m ${PAGE_W - MARGIN} ${this.y} l S`
     );
     this.y -= 14;
+  }
+
+  addPageBreak() {
+    this.newPage();
   }
 
   addRow(left: string, right: string, bold = false) {
@@ -221,6 +243,7 @@ export class SimplePdf {
       push(Buffer.from(`${objs.length + 1} 0 obj\n${body}\nendobj\n`, "utf8"));
 
     const fontId = pushText("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+    const boldFontId = pushText("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>");
     const pageIds: number[] = [];
     const pageBodies: Array<{ id: number; body: string }> = [];
 
@@ -245,7 +268,7 @@ export class SimplePdf {
       const streamLen = Buffer.byteLength(stream, "utf8");
       const contentsId = pushText(`<< /Length ${streamLen} >>\nstream\n${stream}\nendstream`);
       const resources =
-        `<< /Font << /F1 ${fontId} 0 R >>` +
+        `<< /Font << /F1 ${fontId} 0 R /F2 ${boldFontId} 0 R >>` +
         (localNames.length ? ` /XObject << ${localNames.join(" ")} >>` : "") +
         ` >>`;
       const annotations = page.links.map(link => pushText(

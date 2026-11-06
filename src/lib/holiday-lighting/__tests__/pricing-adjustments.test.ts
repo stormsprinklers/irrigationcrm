@@ -352,3 +352,36 @@ test("manual flat price and discounts work without a parts/labor breakdown", () 
     [{ name: "Roofline lighting", total: 600 }]
   );
 });
+
+test("itemized backend materials use MSRP for cancellation and contractor cost for job costing", () => {
+  const selections = parseHolidaySelections({ defaultLightStyleKey: "c9" });
+  const measurements = parseHolidayMeasurements({
+    segments: [{ id: "roof", label: "Roofline", lengthFt: 10 }],
+  });
+  const prices: PriceLookup = new Map([
+    ["HL-C9-SERVICE-FT", {
+      id: "c9",
+      name: "C9 service",
+      unitPrice: 5,
+      unitCost: 0,
+      backendItems: [
+        { id: "bulbs", name: "Bulbs", quantity: 1, contractorCost: 1, msrp: 2 },
+        { id: "timer", name: "Timer", quantity: 0.1, contractorCost: 5, msrp: 10 },
+      ],
+    }],
+  ]);
+
+  const result = computeHolidayQuotePricing({
+    catalog: DEFAULT_HOLIDAY_CATALOG,
+    measurements,
+    selections,
+    prices,
+  });
+
+  assert.equal(result.cancellationFee, 30);
+  assert.equal(result.contractorMaterialCost, 15);
+  assert.deepEqual(result.backendCostItems.map((item) => [item.name, item.quantity, item.msrpTotal, item.contractorTotal]), [
+    ["Bulbs", 10, 20, 10],
+    ["Timer", 1, 10, 5],
+  ]);
+});

@@ -142,6 +142,7 @@ export async function GET(request: NextRequest) {
             name: row.name,
             unitPrice: row.unitPrice,
             unitCost: row.unitCost,
+            backendItems: row.backendItems,
           },
         ])
       );

@@ -4,7 +4,21 @@ import { portalFeatureEnabled } from "./permissions";
 import { activePublicCapability } from "@/lib/security/public-capability";
 
 const estimateLineItemsInclude = {
-  customer: { select: { estimateVslViewedAt: true } },
+  customer: {
+    select: {
+      estimateVslViewedAt: true,
+      name: true,
+      email: true,
+      phone: true,
+      address: true,
+      city: true,
+      state: true,
+      zip: true,
+    },
+  },
+  property: {
+    select: { address: true, city: true, state: true, zip: true },
+  },
   lineItems: {
     orderBy: { sortOrder: "asc" as const },
     include: { priceBookItem: { select: { type: true } } },

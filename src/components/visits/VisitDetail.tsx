@@ -14,6 +14,7 @@ import { VisitBillingDialog } from "@/components/invoices/VisitBillingDialog";
 import { CustomerVisitPanel } from "@/components/visits/CustomerVisitPanel";
 import { LineItemsSection } from "@/components/visits/LineItemsSection";
 import { VisitProfitSection } from "@/components/visits/VisitProfitSection";
+import { VisitJobCostSection } from "@/components/visits/VisitJobCostSection";
 import { TimeTrackingBar } from "@/components/visits/TimeTrackingBar";
 import { VisitAttachmentsSection } from "@/components/visits/VisitAttachmentsSection";
 import { VisitChecklistsSection } from "@/components/visits/VisitChecklistsSection";
@@ -209,6 +210,7 @@ export function VisitDetail({ visitId }: Props) {
   const canChooseBillingAmount = canAccessInvoices(session?.user?.role ?? "");
   const canEditSchedule = !isFieldRole(session?.user?.role ?? "");
   const showProfit = canViewProfitMargins(session?.user?.role ?? "");
+  const showJobCosts = ["ADMIN", "MANAGER", "TECH", "INSTALLER"].includes(session?.user?.role ?? "");
   const paymentStatus = searchParams.get("payment");
   const sessionId = searchParams.get("session_id");
   const [visit, setVisit] = useState<VisitDetailData | null>(null);
@@ -633,6 +635,7 @@ export function VisitDetail({ visitId }: Props) {
             ) : null}
           </div>
 
+          {showJobCosts && visit.designExportMetadata?.source === "holiday-lighting-quote" ? <VisitJobCostSection visitId={visit.id} /> : null}
           {showProfit ? <VisitProfitSection visitId={visit.id} /> : null}
 
           <VisitTagsSection visitId={visit.id} tags={visit.tags} onUpdated={load} />

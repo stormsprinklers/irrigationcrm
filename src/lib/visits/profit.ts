@@ -1,15 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import {
   computeVisitCommission,
-  computeVisitWorkHours,
   loadCompanyCommissionSettings,
   sumLineItemCosts,
 } from "@/lib/compensation/commission";
-import {
-  effectiveHourlyCost,
-  usesCommissionPay,
-} from "@/lib/compensation/rates";
+import { usesCommissionPay } from "@/lib/compensation/rates";
 import { computeTotals, sumDiscounts, sumLineItems, toNumber } from "@/lib/visits/totals";
+import { loadVisitJobCosts } from "@/lib/visits/job-costs";
 
 export type VisitProfitBreakdownLine = {
   label: string;
@@ -38,7 +35,6 @@ export async function computeVisitProfit(companyId: string, visitId: string): Pr
     include: {
       lineItems: true,
       discounts: true,
-      timeEvents: { include: { user: { select: { id: true, name: true } } } },
       assignedUser: {
         select: {
           id: true,
@@ -59,42 +55,18 @@ export async function computeVisitProfit(companyId: string, visitId: string): Pr
   const subtotal = sumLineItems(visit.lineItems);
   const discountTotal = sumDiscounts(subtotal, visit.discounts);
   const revenue = computeTotals(subtotal, discountTotal).total;
-  const lineItemCost = await sumLineItemCosts(visit.lineItems);
-
-  const hoursByUser = computeVisitWorkHours(visit.timeEvents);
-  const userIds = [...hoursByUser.keys()];
-  const users =
-    userIds.length > 0
-      ? await prisma.user.findMany({
-          where: { id: { in: userIds }, companyId },
-          select: {
-            id: true,
-            name: true,
-            payType: true,
-            hourlyRate: true,
-            commissionPercent: true,
-            annualSalary: true,
-          },
-        })
-      : [];
-
-  const userMap = new Map(users.map((u) => [u.id, u]));
-  let actualLaborCost = 0;
-  const laborBreakdown: VisitProfitBreakdownLine[] = [];
-
-  for (const [userId, hours] of hoursByUser) {
-    const user = userMap.get(userId);
-    if (!user) continue;
-    const rate = effectiveHourlyCost(user);
-    if (rate == null || hours <= 0) continue;
-    const cost = Math.round(hours * rate * 100) / 100;
-    actualLaborCost += cost;
-    laborBreakdown.push({
-      label: `${user.name} (${hours.toFixed(2)}h × ${formatCurrency(rate)}/hr)`,
-      amount: cost,
-    });
-  }
-  actualLaborCost = Math.round(actualLaborCost * 100) / 100;
+  const jobCosts = await loadVisitJobCosts(companyId, visitId);
+  const fallbackLineItemCost = await sumLineItemCosts(visit.lineItems);
+  const lineItemCost = jobCosts?.materialCostsConfigured ? jobCosts.materialCost : fallbackLineItemCost;
+  const actualLaborCost = jobCosts?.laborCost ?? 0;
+  const laborBreakdown: VisitProfitBreakdownLine[] = (jobCosts?.labor ?? []).flatMap((entry) =>
+    entry.cost != null && entry.hours > 0 && entry.hourlyRate != null
+      ? [{
+          label: `${entry.name} (${entry.hours.toFixed(2)}h × ${formatCurrency(entry.hourlyRate)}/hr)`,
+          amount: entry.cost,
+        }]
+      : []
+  );
 
   let estimatedCommission = 0;
   if (
@@ -116,7 +88,7 @@ export async function computeVisitProfit(companyId: string, visitId: string): Pr
   const marginPercent = revenue > 0 ? Math.round((netProfit / revenue) * 1000) / 10 : 0;
 
   const notes: string[] = [];
-  const hasBundledLabor = visit.lineItems.some((li) => li.priceBookItemId != null);
+  const hasBundledLabor = !jobCosts?.materialCostsConfigured && visit.lineItems.some((li) => li.priceBookItemId != null);
   if (hasBundledLabor && actualLaborCost > 0) {
     notes.push(
       "Service line items may include bundled labor in material COGS; actual visit hours are shown separately."

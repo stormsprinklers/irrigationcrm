@@ -6,6 +6,7 @@ export function snapshotHolidayPrices(prices: PriceLookup): HolidayPricingSnapsh
     [...prices.entries()].map(([sku, item]) => [sku, {
       unitPrice: item.unitPrice,
       unitCost: item.unitCost,
+      backendItems: item.backendItems,
     }])
   );
 }
@@ -18,7 +19,7 @@ export function applyHolidayPricingSnapshot(
   return new Map(
     [...currentPrices.entries()].map(([sku, item]) => {
       const saved = snapshot[sku];
-      return [sku, saved ? { ...item, unitPrice: saved.unitPrice, unitCost: saved.unitCost } : item];
+      return [sku, saved ? { ...item, unitPrice: saved.unitPrice, unitCost: saved.unitCost, backendItems: saved.backendItems } : item];
     })
   );
 }
