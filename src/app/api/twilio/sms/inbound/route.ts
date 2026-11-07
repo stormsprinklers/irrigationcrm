@@ -59,27 +59,39 @@ async function saveInboundMedia(params: {
 
   // Persist each attachment independently. If a later download fails, Twilio's
   // retry will skip completed indexes and resume the missing ones.
+  const errors: unknown[] = [];
   for (const item of missing) {
-    const saved = await downloadTwilioMedia({
-      mediaUrl: item.url,
-      companyId: params.companyId,
-      messageId: params.messageId,
-      mimeType: item.contentType,
-      index: item.index,
-    });
-    const alreadySaved = await prisma.messageMedia.findFirst({
-      where: {
+    try {
+      const saved = await downloadTwilioMedia({
+        mediaUrl: item.url,
+        companyId: params.companyId,
         messageId: params.messageId,
-        fileName: { startsWith: `media-${item.index}.` },
-      },
-      select: { id: true },
-    });
-    if (!alreadySaved) {
-      await prisma.messageMedia.create({
-        data: { messageId: params.messageId, ...saved },
+        mimeType: item.contentType,
+        index: item.index,
+      });
+      const alreadySaved = await prisma.messageMedia.findFirst({
+        where: {
+          messageId: params.messageId,
+          fileName: { startsWith: `media-${item.index}.` },
+        },
+        select: { id: true },
+      });
+      if (!alreadySaved) {
+        await prisma.messageMedia.create({
+          data: { messageId: params.messageId, ...saved },
+        });
+      }
+    } catch (error) {
+      errors.push(error);
+      console.error("Inbound MMS attachment could not be saved", {
+        messageId: params.messageId,
+        mediaIndex: item.index,
+        mimeType: item.contentType,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   }
+  if (errors.length) throw errors[0];
 }
 
 export async function POST(request: NextRequest) {

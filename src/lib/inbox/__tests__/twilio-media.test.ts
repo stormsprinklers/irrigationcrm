@@ -10,8 +10,8 @@ import {
 } from "../twilio-media";
 import { isBrowserImageMimeType } from "../attachments";
 
-test("inbound MMS limit accommodates full-resolution phone photos", () => {
-  assert.equal(INBOUND_SMS_MEDIA_MAX_BYTES, 25 * 1024 * 1024);
+test("inbound MMS limit accommodates phone videos as well as full-resolution photos", () => {
+  assert.equal(INBOUND_SMS_MEDIA_MAX_BYTES, 100 * 1024 * 1024);
 });
 
 test("Twilio media downloads allow the documented protected-media redirect", () => {

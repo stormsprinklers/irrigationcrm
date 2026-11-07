@@ -37,7 +37,13 @@ export async function GET(request: NextRequest) {
   return new NextResponse(result.stream, {
     headers: {
       "Content-Type": result.blob.contentType,
+      "Content-Disposition": `inline; filename="media.${result.blob.pathname.split(".").pop()?.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8) || "bin"}"`,
       "Cache-Control": "private, max-age=3600",
     },
   });
+}
+
+export async function HEAD(request: NextRequest) {
+  const response = await GET(request);
+  return new NextResponse(null, { status: response.status, headers: response.headers });
 }

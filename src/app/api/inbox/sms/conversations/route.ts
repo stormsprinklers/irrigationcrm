@@ -16,8 +16,7 @@ import { findOrCreateSmsConversation, nextCustomerIdForSmsPhone } from "@/lib/in
 import { resolveCustomerIdForSmsPhone } from "@/lib/inbox/customer-lookup";
 import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
 import type { PendingAttachment } from "@/lib/inbox/attachments";
-import { isBlobStorageUrl } from "@/lib/blob/urls";
-import { pathnameFromBlobUrl, twilioAccessibleMediaUrl } from "@/lib/inbox/media-url";
+import { prepareSmsMediaDelivery } from "@/lib/inbox/sms-media-delivery";
 import { WEBSITE_FORM_SMS_BODY_STARTS_WITH } from "@/lib/inbox/website-leads";
 import { markInboundConversationRead } from "@/lib/inbox/badge-counts";
 import { getCompanyCallerId } from "@/lib/voice/company-phone";
@@ -63,17 +62,14 @@ async function sendSmsMessage(params: {
   const blocked = await isContactBlocked(params.user.companyId, normalizedTo, null);
   if (blocked) throw new Error("Contact is blocked");
 
-  const mediaUrls = params.media
-    .map((item) => {
-      if (item.publicUrl?.includes("/api/twilio/mms/media")) return item.publicUrl;
-      if (item.publicUrl && !isBlobStorageUrl(item.publicUrl)) return item.publicUrl;
-      const pathname = pathnameFromBlobUrl(item.blobUrl);
-      if (pathname) return twilioAccessibleMediaUrl(pathname);
-      return item.publicUrl ?? item.blobUrl;
-    })
-    .filter(Boolean);
+  const delivery = prepareSmsMediaDelivery({
+    companyId: params.user.companyId,
+    body: params.messageBody,
+    media: params.media,
+    publicBaseUrl: company.customerBaseUrl,
+  });
 
-  if (!params.messageBody.trim() && !mediaUrls.length) {
+  if (!delivery.body && !delivery.mediaUrls.length) {
     throw new Error("Message body or media required");
   }
 
@@ -99,8 +95,8 @@ async function sendSmsMessage(params: {
     companyId: params.user.companyId,
     from: fromNumber,
     to: normalizedTo,
-    body: params.messageBody,
-    mediaUrl: mediaUrls.length ? mediaUrls : undefined,
+    body: delivery.body,
+    mediaUrl: delivery.mediaUrls.length ? delivery.mediaUrls : undefined,
     statusCallback: params.statusCallback,
   });
 
@@ -122,7 +118,7 @@ async function sendSmsMessage(params: {
           senderId: params.user.id,
           direction: "OUTBOUND",
           body: prefixOutboundSmsWithCompanyName(company.name, params.messageBody.trim()) ||
-            (mediaUrls.length ? "[Media message]" : ""),
+            (params.media.length ? "[Media message]" : ""),
           twilioMessageSid: twilioMessage.sid,
           deliveryStatus: "queued",
           ...(params.media.length

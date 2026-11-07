@@ -11,8 +11,7 @@ import { isSmsNotDelivered } from "@/lib/inbox/sms-delivery";
 import { sendSms } from "@/lib/inbox/twilio";
 import { outboundCommsErrorResponse } from "@/lib/communications/outbound-guard";
 import { prisma } from "@/lib/prisma";
-import { pathnameFromBlobUrl, twilioAccessibleMediaUrl } from "@/lib/inbox/media-url";
-import { isBlobStorageUrl } from "@/lib/blob/urls";
+import { prepareSmsMediaDelivery } from "@/lib/inbox/sms-media-delivery";
 import {
   describeSmsSendError,
   SmsSentButNotRecordedError,
@@ -69,7 +68,7 @@ export async function POST(_request: NextRequest, context: Ctx) {
 
     const company = await prisma.company.findUnique({
       where: { id: user.companyId },
-      select: { twilioPhone: true },
+      select: { twilioPhone: true, customerBaseUrl: true },
     });
     const { getCompanyCallerId } = await import("@/lib/voice/company-phone");
     const fromNumber =
@@ -80,17 +79,19 @@ export async function POST(_request: NextRequest, context: Ctx) {
       );
     }
 
-    const mediaUrls = original.media
-      .map((item) => {
-        if (!isBlobStorageUrl(item.blobUrl)) return item.blobUrl;
-        const pathname = pathnameFromBlobUrl(item.blobUrl);
-        if (pathname) return twilioAccessibleMediaUrl(pathname);
-        return item.blobUrl;
-      })
-      .filter(Boolean);
-
     const bodyText =
       original.body === "[Media message]" ? "" : original.body;
+    const delivery = prepareSmsMediaDelivery({
+      companyId: user.companyId,
+      body: bodyText,
+      media: original.media.map((item) => ({
+        blobUrl: item.blobUrl,
+        fileName: item.fileName ?? "media",
+        mimeType: item.mimeType,
+        sizeBytes: item.sizeBytes ?? Number.MAX_SAFE_INTEGER,
+      })),
+      publicBaseUrl: company?.customerBaseUrl,
+    });
 
     let twilioMessage;
     try {
@@ -98,8 +99,8 @@ export async function POST(_request: NextRequest, context: Ctx) {
         companyId: user.companyId,
         from: fromNumber,
         to,
-        body: bodyText,
-        mediaUrl: mediaUrls.length ? mediaUrls : undefined,
+        body: delivery.body,
+        mediaUrl: delivery.mediaUrls.length ? delivery.mediaUrls : undefined,
         statusCallback: twilioSmsStatusCallbackUrl(),
       });
     } catch (err) {

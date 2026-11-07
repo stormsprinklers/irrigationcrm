@@ -3,6 +3,10 @@ import { getBlobToken } from "@/lib/blob/storage";
 import { blobPathnameFromUrl, isBlobStorageUrl } from "@/lib/blob/urls";
 
 export const SMS_MEDIA_MAX_BYTES = 5 * 1024 * 1024;
+/** Carrier-safe ceiling for non-image MMS. Larger videos are delivered as secure links. */
+export const SMS_VIDEO_INLINE_MAX_BYTES = 600 * 1024;
+/** Large CRM media is stored in Blob and shared by signed link instead of attached to MMS. */
+export const SMS_LINK_MEDIA_MAX_BYTES = 100 * 1024 * 1024;
 export const EMAIL_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 export const EMAIL_ATTACHMENT_MAX_TOTAL_BYTES = 25 * 1024 * 1024;
 export const EMAIL_ATTACHMENT_MAX_COUNT = 10;
@@ -18,9 +22,12 @@ export const SMS_ALLOWED_MIME_TYPES = [
   "image/heic-sequence",
   "image/heif-sequence",
   "video/mp4",
+  "video/mpeg4",
   "video/quicktime",
   "video/3gpp",
+  "video/3gpp2",
   "video/mpeg",
+  "video/webm",
 ] as const;
 
 export const EMAIL_ALLOWED_MIME_TYPES = [
@@ -44,6 +51,13 @@ export type PendingAttachment = {
   sizeBytes: number;
   publicUrl?: string;
 };
+
+export function shouldSendSmsMediaAsLink(media: Pick<PendingAttachment, "mimeType" | "sizeBytes">) {
+  return (
+    media.sizeBytes > SMS_MEDIA_MAX_BYTES ||
+    (isVideoMimeType(media.mimeType) && media.sizeBytes > SMS_VIDEO_INLINE_MAX_BYTES)
+  );
+}
 
 export function isAllowedSmsMimeType(mimeType: string) {
   return (SMS_ALLOWED_MIME_TYPES as readonly string[]).includes(mimeType);
@@ -80,9 +94,16 @@ export async function hasExpectedFileSignature(file: File): Promise<boolean> {
   if (mime === "application/pdf") {
     return new TextDecoder().decode(bytes.slice(0, 5)) === "%PDF-";
   }
-  if (mime === "video/mp4" || mime === "video/quicktime" || mime === "video/3gpp") {
+  if (
+    mime === "video/mp4" ||
+    mime === "video/mpeg4" ||
+    mime === "video/quicktime" ||
+    mime === "video/3gpp" ||
+    mime === "video/3gpp2"
+  ) {
     return new TextDecoder().decode(bytes.slice(4, 8)) === "ftyp";
   }
+  if (mime === "video/webm") return startsWith(bytes, [0x1a, 0x45, 0xdf, 0xa3]);
   if (mime === "video/mpeg") {
     return startsWith(bytes, [0x00, 0x00, 0x01, 0xba]) || startsWith(bytes, [0x00, 0x00, 0x01, 0xb3]);
   }

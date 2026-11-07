@@ -11,7 +11,7 @@ import {
  * Twilio does not impose an inbound-MMS size limit. Keep a defensive application
  * limit high enough for full-resolution phone photos while bounding function memory.
  */
-export const INBOUND_SMS_MEDIA_MAX_BYTES = 25 * 1024 * 1024;
+export const INBOUND_SMS_MEDIA_MAX_BYTES = 100 * 1024 * 1024;
 
 /**
  * The Media resource starts on api.twilio.com. With protected media enabled,

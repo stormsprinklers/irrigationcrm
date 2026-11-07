@@ -59,13 +59,23 @@ export function MessageMediaGallery({
           }
           if (isVideoMimeType(item.mimeType)) {
             return (
-              <video
-                key={item.id}
-                src={src}
-                className="max-h-48 max-w-full rounded-lg"
-                controls
-                preload="metadata"
-              />
+              <div key={item.id} className="space-y-1">
+                <video
+                  src={src}
+                  className="max-h-48 max-w-full rounded-lg"
+                  controls
+                  preload="metadata"
+                />
+                <a
+                  href={src}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-xs underline"
+                >
+                  <Download className="h-3 w-3" />
+                  Download video
+                </a>
+              </div>
             );
           }
           return (

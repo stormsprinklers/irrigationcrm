@@ -29,10 +29,14 @@ export function verifyMediaSignature(pathname: string, expires: number, signatur
 }
 
 /** Twilio-accessible URL for a private blob (MMS outbound). */
-export function twilioAccessibleMediaUrl(pathname: string, ttlSeconds = 3600) {
+export function twilioAccessibleMediaUrl(
+  pathname: string,
+  ttlSeconds = 3600,
+  publicBaseUrl?: string | null
+) {
   const expires = Math.floor(Date.now() / 1000) + ttlSeconds;
   const sig = signMediaPath(pathname, expires);
-  const base = getAppBaseUrl();
+  const base = publicBaseUrl?.trim().replace(/\/$/, "") || getAppBaseUrl();
   return `${base}/api/twilio/mms/media?pathname=${encodeURIComponent(pathname)}&expires=${expires}&sig=${sig}`;
 }
 

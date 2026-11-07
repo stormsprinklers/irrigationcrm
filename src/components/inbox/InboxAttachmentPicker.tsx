@@ -1,12 +1,19 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { upload } from "@vercel/blob/client";
 import { ImagePlus, Link2, Loader2, Paperclip, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { PendingAttachment } from "@/lib/inbox/attachments";
-import { isImageMimeType, isVideoMimeType } from "@/lib/inbox/attachments";
+import {
+  SMS_LINK_MEDIA_MAX_BYTES,
+  isImageMimeType,
+  isVideoMimeType,
+  shouldSendSmsMediaAsLink,
+} from "@/lib/inbox/attachments";
+import { blobProxyUrl } from "@/lib/blob/urls";
 import { cn } from "@/lib/utils";
 
 const SMS_BROWSER_UPLOAD_TARGET_BYTES = 3.5 * 1024 * 1024;
@@ -23,6 +30,13 @@ function inferredImageMimeType(file: File) {
     webp: "image/webp",
     heic: "image/heic",
     heif: "image/heif",
+    mp4: "video/mp4",
+    mov: "video/quicktime",
+    mpeg: "video/mpeg",
+    mpg: "video/mpeg",
+    webm: "video/webm",
+    "3gp": "video/3gpp",
+    "3g2": "video/3gpp2",
   };
   return extension ? mimeByExtension[extension] ?? "" : "";
 }
@@ -83,13 +97,36 @@ async function prepareBrowserSmsPhoto(file: File) {
 async function uploadErrorMessage(response: Response, fileName: string) {
   const fallback = `Failed to upload ${fileName}`;
   const raw = await response.text().catch(() => "");
-  if (!raw) return response.status === 413 ? "Photo is too large to upload" : fallback;
+  if (!raw) return response.status === 413 ? "File is too large to upload" : fallback;
   try {
     const parsed = JSON.parse(raw) as { error?: string };
     return parsed.error ?? fallback;
   } catch {
-    return response.status === 413 ? "Photo is too large to upload" : fallback;
+    return response.status === 413 ? "File is too large to upload" : fallback;
   }
+}
+
+async function uploadLargeSmsMedia(file: File): Promise<PendingAttachment> {
+  if (file.size > SMS_LINK_MEDIA_MAX_BYTES) {
+    throw new Error("Videos and photos must be 100 MB or smaller");
+  }
+  const pathResponse = await fetch(
+    `/api/inbox/media/client-upload?fileName=${encodeURIComponent(file.name)}&contentType=${encodeURIComponent(file.type)}`
+  );
+  if (!pathResponse.ok) throw new Error(await uploadErrorMessage(pathResponse, file.name));
+  const { pathname } = (await pathResponse.json()) as { pathname: string };
+  const blob = await upload(pathname, file, {
+    access: "private",
+    handleUploadUrl: "/api/inbox/media/client-upload",
+    contentType: file.type,
+  });
+  return {
+    blobUrl: blob.url,
+    publicUrl: blobProxyUrl(blob.url),
+    fileName: file.name,
+    mimeType: file.type,
+    sizeBytes: file.size,
+  };
 }
 
 export function InboxAttachmentPicker({
@@ -125,9 +162,18 @@ export function InboxAttachmentPicker({
         if (next.length >= maxCount) break;
 
         const uploadFile = channel === "sms" ? await prepareBrowserSmsPhoto(file) : file;
-        const formData = new FormData();
-        formData.set("file", uploadFile);
         try {
+          if (channel === "sms" && uploadFile.size > SMS_BROWSER_UPLOAD_TARGET_BYTES) {
+            const data = await uploadLargeSmsMedia(uploadFile);
+            next.push(data);
+            if (shouldSendSmsMediaAsLink(data)) {
+              toast.info("Large video uploaded. It will be sent as a secure link for reliable delivery.");
+            }
+            continue;
+          }
+
+          const formData = new FormData();
+          formData.set("file", uploadFile);
           const res = await fetch(`/api/inbox/media/upload?channel=${channel}`, {
             method: "POST",
             body: formData,
@@ -144,9 +190,16 @@ export function InboxAttachmentPicker({
             mimeType: data.mimeType,
             sizeBytes: data.sizeBytes,
           });
+          if (channel === "sms" && shouldSendSmsMediaAsLink(data)) {
+            toast.info("This video will be sent as a secure link for reliable delivery.");
+          }
         } catch (error) {
           console.error("Inbox attachment upload failed", error);
-          toast.error(`Failed to upload ${file.name}. Please try again.`);
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : `Failed to upload ${file.name}. Please try again.`
+          );
         }
       }
       onChange(next);
@@ -170,7 +223,7 @@ export function InboxAttachmentPicker({
           multiple={channel === "email"}
           accept={
             channel === "sms"
-              ? "image/*,video/mp4,video/quicktime,video/3gpp,video/mpeg"
+              ? "image/*,video/mp4,video/quicktime,video/3gpp,video/3gpp2,video/mpeg,video/webm"
               : "image/*,.pdf,.txt,.csv,.doc,.docx,.xls,.xlsx"
           }
           onChange={(e) => handleFiles(e.target.files)}

@@ -17,8 +17,7 @@ import { findOrCreateSmsConversation } from "@/lib/inbox/conversations";
 import { resolveCustomerIdForSmsPhone } from "@/lib/inbox/customer-lookup";
 import { twilioSmsStatusCallbackUrl } from "@/lib/app-url";
 import type { PendingAttachment } from "@/lib/inbox/attachments";
-import { isBlobStorageUrl } from "@/lib/blob/urls";
-import { pathnameFromBlobUrl, twilioAccessibleMediaUrl } from "@/lib/inbox/media-url";
+import { prepareSmsMediaDelivery } from "@/lib/inbox/sms-media-delivery";
 
 export async function GET(request: NextRequest) {
   try {
@@ -95,17 +94,14 @@ export async function POST(request: NextRequest) {
     const blocked = await isContactBlocked(user.companyId, normalizedTo, null);
     if (blocked) return forbiddenResponse("Contact is blocked");
 
-    const mediaUrls = media
-      .map((item) => {
-        if (item.publicUrl?.includes("/api/twilio/mms/media")) return item.publicUrl;
-        if (item.publicUrl && !isBlobStorageUrl(item.publicUrl)) return item.publicUrl;
-        const pathname = pathnameFromBlobUrl(item.blobUrl);
-        if (pathname) return twilioAccessibleMediaUrl(pathname);
-        return item.publicUrl ?? item.blobUrl;
-      })
-      .filter(Boolean);
+    const delivery = prepareSmsMediaDelivery({
+      companyId: user.companyId,
+      body: messageBody,
+      media,
+      publicBaseUrl: company?.customerBaseUrl,
+    });
 
-    if (!messageBody.trim() && !mediaUrls.length) {
+    if (!delivery.body && !delivery.mediaUrls.length) {
       return badRequestResponse("Message body or media required");
     }
 
@@ -120,8 +116,8 @@ export async function POST(request: NextRequest) {
       companyId: user.companyId,
       from: fromNumber,
       to: normalizedTo,
-      body: messageBody,
-      mediaUrl: mediaUrls.length ? mediaUrls : undefined,
+      body: delivery.body,
+      mediaUrl: delivery.mediaUrls.length ? delivery.mediaUrls : undefined,
       statusCallback,
     });
 
@@ -140,7 +136,7 @@ export async function POST(request: NextRequest) {
           direction: "OUTBOUND",
           body:
             prefixOutboundSmsWithCompanyName(company?.name ?? "", messageBody.trim()) ||
-            (mediaUrls.length ? "[Media message]" : ""),
+            (media.length ? "[Media message]" : ""),
           twilioMessageSid: twilioMessage.sid,
           deliveryStatus: "queued",
           ...(media.length
