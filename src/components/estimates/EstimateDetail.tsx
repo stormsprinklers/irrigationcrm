@@ -282,6 +282,24 @@ export function EstimateDetail({ estimateId }: Props) {
       .finally(() => setLoading(false));
   }, [load]);
 
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const paymentResult = url.searchParams.get("payment");
+    if (!paymentResult) return;
+
+    if (paymentResult === "success") {
+      toast.success("Payment submitted", {
+        description: "The estimate will update as soon as Stripe confirms the payment.",
+      });
+      void load();
+    } else if (paymentResult === "cancelled") {
+      toast.message("Payment was cancelled. No charge was made.");
+    }
+
+    url.searchParams.delete("payment");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [load]);
+
   // Poll while waiting for the customer to approve on the portal link.
   useEffect(() => {
     if (estimate?.status !== "SENT") return;
@@ -735,7 +753,9 @@ export function EstimateDetail({ estimateId }: Props) {
               </Button>
             </>
           ) : null}
-          {estimate.status === "APPROVED" || estimate.status === "CONVERTED" ? (
+          {estimate.status === "APPROVED" ||
+          estimate.status === "CONVERTED" ||
+          (estimate.status === "SENT" && Boolean(estimate.signedAt)) ? (
             <Button
               variant="outline"
               size="sm"
@@ -743,7 +763,7 @@ export function EstimateDetail({ estimateId }: Props) {
               onClick={() => setInvoiceDialogOpen(true)}
             >
               <FileText className="h-4 w-4" />
-              Send Invoice
+              Invoice / Take Payment
             </Button>
           ) : null}
           {canDelete && ["DRAFT", "SENT", "APPROVED"].includes(estimate.status) ? (
@@ -786,7 +806,7 @@ export function EstimateDetail({ estimateId }: Props) {
       {estimate.status === "SENT" ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
           {estimate.signedAt
-            ? `Customer signed ${format(new Date(estimate.signedAt), "MMM d, yyyy h:mm a")} — waiting for payment or a saved card before approval.`
+            ? `Customer signed ${format(new Date(estimate.signedAt), "MMM d, yyyy h:mm a")} — collect a full or partial payment, send an invoice, or save a card to finish approval.`
             : "Waiting for customer approval — this page updates automatically when they sign."}
         </div>
       ) : null}

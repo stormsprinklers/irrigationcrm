@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { FileText, Loader2, Mail, MessageSquare } from "lucide-react";
+import { Banknote, CreditCard, FileText, Loader2, Mail, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 type AmountType = "PERCENT" | "FIXED";
 type Channel = "EMAIL" | "SMS";
+type WorkingAction = Channel | "CARD" | "CASH" | "CHECK" | null;
 
 type InvoiceAvailability = {
   estimateTotal: number;
@@ -49,9 +50,9 @@ export function EstimateInvoiceDialog({
 }: Props) {
   const [availability, setAvailability] = useState<InvoiceAvailability | null>(null);
   const [loading, setLoading] = useState(false);
-  const [sendingChannel, setSendingChannel] = useState<Channel | null>(null);
+  const [working, setWorking] = useState<WorkingAction>(null);
   const [amountType, setAmountType] = useState<AmountType>("PERCENT");
-  const [percentage, setPercentage] = useState("100");
+  const [percentage, setPercentage] = useState("50");
   const [fixedAmount, setFixedAmount] = useState("");
 
   useEffect(() => {
@@ -59,7 +60,7 @@ export function EstimateInvoiceDialog({
     let cancelled = false;
     setAvailability(null);
     setAmountType("PERCENT");
-    setPercentage("100");
+    setPercentage("50");
     setFixedAmount("");
     setLoading(true);
     fetch(`/api/estimates/${estimateId}/invoice`)
@@ -69,7 +70,7 @@ export function EstimateInvoiceDialog({
         if (cancelled) return;
         const next = data as InvoiceAvailability;
         setAvailability(next);
-        setFixedAmount(next.remainingBalance.toFixed(2));
+        setFixedAmount((next.remainingBalance / 2).toFixed(2));
       })
       .catch((error) => {
         if (!cancelled) {
@@ -120,7 +121,7 @@ export function EstimateInvoiceDialog({
       return;
     }
 
-    setSendingChannel(channel);
+    setWorking(channel);
     try {
       const response = await fetch(`/api/estimates/${estimateId}/invoice`, {
         method: "POST",
@@ -152,7 +153,57 @@ export function EstimateInvoiceDialog({
     } catch {
       toast.error("Invoice could not be sent. Check your connection and try again.");
     } finally {
-      setSendingChannel(null);
+      setWorking(null);
+    }
+  }
+
+  async function takeCardPayment() {
+    if (!availability || amountError) return;
+    setWorking("CARD");
+    try {
+      const response = await fetch(`/api/estimates/${estimateId}/payments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ method: "CARD", amount: invoiceAmount }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        toast.error(data.error ?? "Payment checkout failed");
+        return;
+      }
+      if (typeof data.url === "string") window.location.href = data.url;
+    } catch {
+      toast.error("Payment checkout failed. Check your connection and try again.");
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function recordManualPayment(method: "CASH" | "CHECK") {
+    if (!availability || amountError) return;
+    setWorking(method);
+    try {
+      const response = await fetch(`/api/estimates/${estimateId}/payments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          method,
+          amount: invoiceAmount,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        toast.error(data.error ?? "Payment could not be recorded");
+        return;
+      }
+      toast.success(`${money(invoiceAmount)} ${method.toLowerCase()} payment recorded`);
+      onSent?.();
+      onClose();
+    } catch {
+      toast.error("Payment could not be recorded. Check your connection and try again.");
+    } finally {
+      setWorking(null);
     }
   }
 
@@ -165,7 +216,7 @@ export function EstimateInvoiceDialog({
         aria-label="Close invoice dialog"
         className="absolute inset-0 bg-black/50"
         onClick={onClose}
-        disabled={Boolean(sendingChannel)}
+        disabled={Boolean(working)}
       />
       <div
         role="dialog"
@@ -179,11 +230,10 @@ export function EstimateInvoiceDialog({
           </div>
           <div>
             <h2 id="estimate-invoice-title" className="text-lg font-semibold">
-              Choose invoice amount
+              Invoice or take payment
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Set how much of {estimateNumber ?? "this estimate"} to invoice {customerName}, then
-              choose how to send it.
+              Choose a full or partial amount for {estimateNumber ?? "this estimate"}.
             </p>
           </div>
         </div>
@@ -292,45 +342,99 @@ export function EstimateInvoiceDialog({
 
             <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 text-center">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                This invoice
+                Amount now
               </p>
               <p className="mt-1 text-3xl font-semibold text-foreground">{money(invoiceAmount)}</p>
               {amountError ? <p className="mt-2 text-sm text-destructive">{amountError}</p> : null}
             </div>
 
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Take payment now</p>
+              <div className="grid gap-2 sm:grid-cols-3">
+                <Button
+                  type="button"
+                  onClick={() => void takeCardPayment()}
+                  disabled={Boolean(amountError) || Boolean(working)}
+                >
+                  {working === "CARD" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CreditCard className="h-4 w-4" />
+                  )}
+                  Enter one-time card
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void recordManualPayment("CASH")}
+                  disabled={Boolean(amountError) || Boolean(working)}
+                >
+                  {working === "CASH" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Banknote className="h-4 w-4" />
+                  )}
+                  Cash
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void recordManualPayment("CHECK")}
+                  disabled={Boolean(amountError) || Boolean(working)}
+                >
+                  {working === "CHECK" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Banknote className="h-4 w-4" />
+                  )}
+                  Check
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                One-time card payments use Stripe&apos;s hosted payment screen and do not save the card.
+              </p>
+            </div>
+
+            <div className="space-y-2 border-t pt-4">
+              <p className="text-sm font-medium">Send invoice to {customerName}</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void send("SMS")}
+                  disabled={Boolean(amountError) || Boolean(working) || !customerPhone}
+                >
+                  {working === "SMS" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <MessageSquare className="h-4 w-4" />
+                  )}
+                  Send via SMS
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void send("EMAIL")}
+                  disabled={Boolean(amountError) || Boolean(working) || !customerEmail}
+                >
+                  {working === "EMAIL" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Mail className="h-4 w-4" />
+                  )}
+                  Send via email
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex justify-end">
               <Button
                 type="button"
                 variant="outline"
                 onClick={onClose}
-                disabled={Boolean(sendingChannel)}
+                disabled={Boolean(working)}
               >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void send("SMS")}
-                disabled={Boolean(amountError) || Boolean(sendingChannel) || !customerPhone}
-              >
-                {sendingChannel === "SMS" ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <MessageSquare className="h-4 w-4" />
-                )}
-                Send via SMS
-              </Button>
-              <Button
-                type="button"
-                onClick={() => void send("EMAIL")}
-                disabled={Boolean(amountError) || Boolean(sendingChannel) || !customerEmail}
-              >
-                {sendingChannel === "EMAIL" ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Mail className="h-4 w-4" />
-                )}
-                Send via email
+                Close
               </Button>
             </div>
             {!customerEmail || !customerPhone ? (

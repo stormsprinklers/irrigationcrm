@@ -28,7 +28,10 @@ export async function getEstimateInvoiceAvailability(params: {
     where: {
       id: params.estimateId,
       companyId: params.companyId,
-      status: { in: ["APPROVED", "CONVERTED"] },
+      OR: [
+        { status: { in: ["APPROVED", "CONVERTED"] } },
+        { status: "SENT", signedAt: { not: null } },
+      ],
     },
     select: {
       total: true,
@@ -40,7 +43,7 @@ export async function getEstimateInvoiceAvailability(params: {
     },
   });
   if (!estimate) {
-    return { ok: false as const, error: "Approved estimate not found", status: 404 };
+    return { ok: false as const, error: "Signed or approved estimate not found", status: 404 };
   }
 
   const estimateTotal = toNumber(estimate.total);
@@ -76,7 +79,10 @@ export async function syncEstimateInvoice(params: {
     where: {
       id: params.estimateId,
       companyId: params.companyId,
-      status: { in: ["APPROVED", "CONVERTED"] },
+      OR: [
+        { status: { in: ["APPROVED", "CONVERTED"] } },
+        { status: "SENT", signedAt: { not: null } },
+      ],
     },
     include: {
       options: { orderBy: { sortOrder: "asc" } },
@@ -89,7 +95,7 @@ export async function syncEstimateInvoice(params: {
     },
   });
   if (!estimate) {
-    return { ok: false as const, error: "Approved estimate not found", status: 404 };
+    return { ok: false as const, error: "Signed or approved estimate not found", status: 404 };
   }
 
   const optionId = estimate.selectedOptionId ?? estimate.options[0]?.id ?? null;
