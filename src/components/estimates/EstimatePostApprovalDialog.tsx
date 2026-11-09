@@ -25,6 +25,13 @@ type Props = {
 
 type Step = "timing" | "schedule" | "deposit";
 
+type SchedulingBillingStatus = {
+  hasPayment: boolean;
+  hasCardOnFile: boolean;
+  cardCheckFailed: boolean;
+  canWaiveCardOnFile: boolean;
+};
+
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
 }
@@ -59,6 +66,9 @@ export function EstimatePostApprovalDialog({
   const [depositDue, setDepositDue] = useState(0);
   const [notifyCustomer, setNotifyCustomer] = useState(true);
   const [sendingInvoice, setSendingInvoice] = useState<"EMAIL" | "SMS" | null>(null);
+  const [billingStatus, setBillingStatus] = useState<SchedulingBillingStatus | null>(null);
+  const [billingStatusError, setBillingStatusError] = useState<string | null>(null);
+  const [waiveCardOnFile, setWaiveCardOnFile] = useState(false);
   const autoRan = useRef(false);
 
   useEffect(() => {
@@ -70,6 +80,9 @@ export function EstimatePostApprovalDialog({
     setDepositDue(0);
     setNotifyCustomer(true);
     setSendingInvoice(null);
+    setBillingStatus(null);
+    setBillingStatusError(null);
+    setWaiveCardOnFile(false);
     const start = addHours(new Date(), 24);
     setStartLocal(toLocalInputValue(start));
     setEndLocal(toLocalInputValue(addHours(start, 2)));
@@ -85,7 +98,18 @@ export function EstimatePostApprovalDialog({
         }
       })
       .catch(() => undefined);
-  }, [open, initialMode]);
+    fetch(`/api/estimates/${estimateId}/post-approval`)
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error ?? "Could not check payment status");
+        setBillingStatus(data as SchedulingBillingStatus);
+      })
+      .catch((error) => {
+        setBillingStatusError(
+          error instanceof Error ? error.message : "Could not check payment status"
+        );
+      });
+  }, [open, initialMode, estimateId]);
 
   const previewDeposit = useMemo(() => {
     if (estimateTotal <= threshold) return 0;
@@ -114,6 +138,7 @@ export function EstimatePostApprovalDialog({
           division: "SERVICE",
         };
         body.notifyCustomer = notifyCustomer;
+        body.waiveCardOnFile = waiveCardOnFile;
       }
 
       const res = await fetch(`/api/estimates/${estimateId}/post-approval`, {
@@ -123,6 +148,14 @@ export function EstimatePostApprovalDialog({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        if (data.code === "CARD_ON_FILE_WAIVER_REQUIRED") {
+          setBillingStatus((current) => ({
+            hasPayment: false,
+            hasCardOnFile: false,
+            cardCheckFailed: current?.cardCheckFailed ?? false,
+            canWaiveCardOnFile: current?.canWaiveCardOnFile ?? false,
+          }));
+        }
         toast.error(data.error ?? "Failed to schedule work");
         return;
       }
@@ -200,6 +233,15 @@ export function EstimatePostApprovalDialog({
 
   if (!open) return null;
 
+  const requiresCardWaiver = Boolean(
+    billingStatus && !billingStatus.hasPayment && !billingStatus.hasCardOnFile
+  );
+  const scheduleDisabled =
+    saving ||
+    !billingStatus ||
+    Boolean(billingStatusError) ||
+    (requiresCardWaiver && (!billingStatus.canWaiveCardOnFile || !waiveCardOnFile));
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <button
@@ -210,7 +252,7 @@ export function EstimatePostApprovalDialog({
           if (!saving) onClose();
         }}
       />
-      <div className="relative z-10 w-full max-w-md rounded-lg border bg-background p-6 shadow-lg">
+      <div className="relative z-10 max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-lg border bg-background p-6 shadow-lg">
         {initialMode === "today" && step === "timing" ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -289,6 +331,45 @@ export function EstimatePostApprovalDialog({
                   </>
                 )}
               </div>
+              {!billingStatus && !billingStatusError ? (
+                <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Checking payment and card status…
+                </div>
+              ) : null}
+              {billingStatusError ? (
+                <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                  {billingStatusError}. Close this window and try again before scheduling.
+                </div>
+              ) : null}
+              {requiresCardWaiver ? (
+                <label className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-3 text-sm text-amber-950">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={waiveCardOnFile}
+                    disabled={!billingStatus?.canWaiveCardOnFile}
+                    onChange={(event) => setWaiveCardOnFile(event.target.checked)}
+                  />
+                  <span>
+                    <span className="block font-semibold">
+                      Waive card on file and schedule anyway
+                    </span>
+                    <span className="mt-1 block text-xs text-amber-900/80">
+                      {billingStatus?.cardCheckFailed
+                        ? "The saved-card status could not be verified and no payment was found. "
+                        : "No partial payment or saved card was found. "}
+                      This waiver will be recorded with your employee account and does not waive the
+                      customer&apos;s outstanding balance.
+                    </span>
+                    {!billingStatus?.canWaiveCardOnFile ? (
+                      <span className="mt-1 block text-xs font-medium">
+                        A CSR, manager, or administrator must approve this waiver.
+                      </span>
+                    ) : null}
+                  </span>
+                </label>
+              ) : null}
               <label className="flex items-start gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
                 <input
                   type="checkbox"
@@ -319,7 +400,11 @@ export function EstimatePostApprovalDialog({
                   Cancel
                 </Button>
               )}
-              <Button type="button" disabled={saving} onClick={() => void submit("another_day")}>
+              <Button
+                type="button"
+                disabled={scheduleDisabled}
+                onClick={() => void submit("another_day")}
+              >
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 Schedule Visit
               </Button>

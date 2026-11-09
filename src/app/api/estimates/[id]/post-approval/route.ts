@@ -3,7 +3,14 @@ import { isHolidayLightingCompany } from "@/lib/company/industry";
 import { NextRequest, NextResponse } from "next/server";
 import { Division, VisitStatus } from "@prisma/client";
 import { addHours } from "date-fns";
-import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import {
+  badRequestResponse,
+  forbiddenResponse,
+  requireSessionUser,
+  unauthorizedResponse,
+} from "@/lib/api-auth";
+import { writeStaffAuditLog } from "@/lib/audit/staff-audit";
+import { getCustomerDefaultCardId } from "@/lib/customers/stripe";
 import { computeDeferredVisitDeposit } from "@/lib/estimates/deferred-visit-deposit";
 import { prisma } from "@/lib/prisma";
 import { resolveServiceAreaByZip } from "@/lib/service-areas";
@@ -12,8 +19,66 @@ import { toNumber } from "@/lib/visits/totals";
 import { defaultEstimateVisitTitle } from "@/lib/estimates/visit-title";
 import { onVisitTimeChanged } from "@/lib/notifications/visit-events";
 import { attachEstimateInvoicesToVisit } from "@/lib/estimates/attach-invoices-to-visit";
+import { canManageTeamSchedule } from "@/lib/schedule/time-off";
 
 type Params = { params: Promise<{ id: string }> };
+
+async function getSchedulingBillingStatus(params: {
+  companyId: string;
+  customerId: string;
+  invoices: Array<{
+    payments: Array<{ amount: unknown; refundedAt: Date | null }>;
+  }>;
+}) {
+  const hasPayment = params.invoices.some((invoice) =>
+    invoice.payments.some((payment) => !payment.refundedAt && toNumber(payment.amount) > 0)
+  );
+
+  try {
+    const cardId = await getCustomerDefaultCardId({
+      companyId: params.companyId,
+      customerId: params.customerId,
+    });
+    return { hasPayment, hasCardOnFile: Boolean(cardId), cardCheckFailed: false };
+  } catch (error) {
+    console.error("Could not verify estimate customer card on file", error);
+    return { hasPayment, hasCardOnFile: false, cardCheckFailed: true };
+  }
+}
+
+export async function GET(_request: NextRequest, { params }: Params) {
+  try {
+    const user = await requireSessionUser();
+    const { id } = await params;
+    const estimate = await prisma.estimate.findFirst({
+      where: { id, companyId: user.companyId },
+      select: {
+        customerId: true,
+        invoices: {
+          select: {
+            payments: { select: { amount: true, refundedAt: true } },
+          },
+        },
+      },
+    });
+    if (!estimate) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    const billing = await getSchedulingBillingStatus({
+      companyId: user.companyId,
+      customerId: estimate.customerId,
+      invoices: estimate.invoices,
+    });
+    return NextResponse.json({
+      ...billing,
+      canWaiveCardOnFile: canManageTeamSchedule(user.role),
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return unauthorizedResponse();
+    }
+    return NextResponse.json({ error: "Could not check payment status" }, { status: 500 });
+  }
+}
 
 /**
  * After estimate signature approval: copy line items to today's visit,
@@ -32,6 +97,11 @@ export async function POST(request: NextRequest, { params }: Params) {
         options: { orderBy: { sortOrder: "asc" } },
         customer: true,
         property: true,
+        invoices: {
+          select: {
+            payments: { select: { amount: true, refundedAt: true } },
+          },
+        },
         company: {
           select: {
             deferredVisitDepositThreshold: true,
@@ -53,6 +123,30 @@ export async function POST(request: NextRequest, { params }: Params) {
     const timing = body.timing as "today" | "another_day" | undefined;
     if (!timing || !["today", "another_day"].includes(timing)) {
       return badRequestResponse('timing must be "today" or "another_day"');
+    }
+
+    let cardOnFileWaived = false;
+    if (timing === "another_day") {
+      const billing = await getSchedulingBillingStatus({
+        companyId: user.companyId,
+        customerId: estimate.customerId,
+        invoices: estimate.invoices,
+      });
+      const waiverRequired = !billing.hasPayment && !billing.hasCardOnFile;
+      if (waiverRequired && body.waiveCardOnFile !== true) {
+        return NextResponse.json(
+          {
+            error:
+              "No payment or card on file was found. Confirm the card-on-file waiver to schedule anyway.",
+            code: "CARD_ON_FILE_WAIVER_REQUIRED",
+          },
+          { status: 400 }
+        );
+      }
+      if (waiverRequired) {
+        if (!canManageTeamSchedule(user.role)) return forbiddenResponse();
+        cardOnFileWaived = true;
+      }
     }
 
     const optionId =
@@ -185,6 +279,22 @@ export async function POST(request: NextRequest, { params }: Params) {
       visitId,
     });
 
+    if (cardOnFileWaived) {
+      await writeStaffAuditLog({
+        companyId: user.companyId,
+        actorId: user.id,
+        entityType: "Estimate",
+        entityId: estimate.id,
+        action: "card_on_file_waived_for_scheduling",
+        field: "cardOnFile",
+        before: { hasCardOnFile: false, hasPayment: false },
+        after: { waivedForScheduling: true },
+        customerId: estimate.customerId,
+        propertyId: estimate.propertyId,
+        visitId,
+      });
+    }
+
     if (timing === "another_day" && body.notifyCustomer !== false) {
       void onVisitTimeChanged({
         visitId,
@@ -202,6 +312,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       depositRequired: depositDue > 0,
       depositThreshold: depositMeta.threshold,
       depositPercent: depositMeta.percent,
+      cardOnFileWaived,
     });
   } catch {
     return unauthorizedResponse();
