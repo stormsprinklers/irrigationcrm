@@ -13,7 +13,8 @@ export function getBrowserMapsApiKey() {
   );
 }
 
-async function resolveMapsApiKey(): Promise<string> {
+async function resolveMapsApiKey(providedKey?: string): Promise<string> {
+  if (providedKey?.trim()) return providedKey.trim();
   const fromEnv = getBrowserMapsApiKey();
   if (fromEnv) return fromEnv;
 
@@ -31,7 +32,7 @@ async function resolveMapsApiKey(): Promise<string> {
 }
 
 /** Load Maps JS API once (Map + Street View + Geometry). */
-export function loadGoogleMaps(): Promise<typeof google> {
+export function loadGoogleMaps(apiKey?: string): Promise<typeof google> {
   if (typeof window === "undefined") {
     return Promise.reject(new Error("Maps can only load in the browser"));
   }
@@ -41,7 +42,7 @@ export function loadGoogleMaps(): Promise<typeof google> {
   if (window.__gmapsPromise) return window.__gmapsPromise;
 
   window.__gmapsPromise = (async () => {
-    const key = await resolveMapsApiKey();
+    const key = await resolveMapsApiKey(apiKey);
     await new Promise<void>((resolve, reject) => {
       const existing = document.querySelector<HTMLScriptElement>(
         'script[data-holiday-maps="1"]'

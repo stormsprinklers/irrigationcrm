@@ -192,3 +192,118 @@ test("permanent lighting never exposes seasonal recurring terms or a cancellatio
   assert.doesNotMatch(view.lineItems[0]?.description ?? "", /recurring|cancel/i);
   assert.equal(view.lineItems.some((line) => line.name === "Professional installation"), false);
 });
+
+test("holiday customer plans expose only selected map geometry and total footage", () => {
+  const view = serializePortalEstimate({
+    id: "estimate-plan",
+    publicToken: "token",
+    status: "SENT",
+    total: 799,
+    subtotal: 799,
+    discountTotal: 0,
+    expiresAt: null,
+    signedAt: null,
+    signatureBlobUrl: null,
+    createdAt: new Date(),
+    designExportMetadata: {
+      source: "holiday-lighting-quote",
+      options: [{
+        letter: "A",
+        pricingMode: "permanent",
+        billedLengthFt: 142.6,
+        strandMap: {
+          version: 1,
+          marginPct: 10,
+          center: { lat: 40.1, lng: -111.7 },
+          features: [{
+            id: "front-roof",
+            label: "Front roofline",
+            color: "#C45C26",
+            paths: [[{ lat: 40.1, lng: -111.7 }, { lat: 40.1001, lng: -111.7001 }]],
+            lengthFt: 142.6,
+            lengthFtWithMargin: 156.9,
+            lightStyleKey: "c9",
+            lightStyleLabel: "C9",
+            bulbColors: "Multicolor",
+            purchaseTotal: 799,
+            leaseTotal: 0,
+            kind: "segment",
+          }],
+        },
+      }],
+    },
+    options: [{
+      id: "option-a",
+      letter: "A",
+      label: "Permanent lighting",
+      description: "Permanent lighting",
+      sortOrder: 0,
+      subtotal: 799,
+      discountTotal: 0,
+      total: 799,
+    }],
+    lineItems: [],
+  });
+
+  assert.equal(view.options[0]?.holidayPlan?.totalEstimatedFeet, 142.6);
+  assert.deepEqual(view.options[0]?.holidayPlan?.features[0]?.paths[0]?.[0], {
+    lat: 40.1,
+    lng: -111.7,
+  });
+  const planJson = JSON.stringify(view.options[0]?.holidayPlan);
+  assert.doesNotMatch(planJson, /purchaseTotal|leaseTotal|lengthFtWithMargin|bulbColors|lightStyle/i);
+});
+
+test("holiday customer plans stay hidden for manual-only measurements", () => {
+  const view = serializePortalEstimate({
+    id: "manual-estimate",
+    publicToken: "token",
+    status: "SENT",
+    total: 500,
+    subtotal: 500,
+    discountTotal: 0,
+    expiresAt: null,
+    signedAt: null,
+    signatureBlobUrl: null,
+    createdAt: new Date(),
+    designExportMetadata: {
+      source: "holiday-lighting-quote",
+      options: [{
+        letter: "A",
+        pricingMode: "buy",
+        billedLengthFt: 100,
+        strandMap: {
+          version: 1,
+          marginPct: 0,
+          center: null,
+          features: [{
+            id: "manual-roofline",
+            label: "Manual roofline",
+            color: "#C45C26",
+            paths: [],
+            lengthFt: 100,
+            lengthFtWithMargin: 100,
+            lightStyleKey: "c9",
+            lightStyleLabel: "C9",
+            purchaseTotal: 500,
+            leaseTotal: 0,
+            kind: "segment",
+          }],
+        },
+      }],
+    },
+    options: [{
+      id: "manual-option",
+      letter: "A",
+      label: "Manual option",
+      description: "Manual option",
+      sortOrder: 0,
+      subtotal: 500,
+      discountTotal: 0,
+      total: 500,
+    }],
+    lineItems: [],
+  });
+
+  assert.equal(view.options[0]?.holidayPlan, null);
+});

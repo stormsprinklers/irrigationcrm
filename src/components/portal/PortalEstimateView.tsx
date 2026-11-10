@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
-import { CheckCircle2, Mail, MessageSquare, Phone } from "lucide-react";
+import { CheckCircle2, Mail, Map, MessageSquare, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { absolutePublicBlobUrl, blobProxyUrl } from "@/lib/blob/urls";
@@ -12,6 +12,8 @@ import { DesignZoneViewer } from "@/components/design/DesignZoneViewer";
 import { PortalShell } from "./PortalShell";
 import { EstimateVslGate } from "./EstimateVslGate";
 import { HolidaySubscriptionAgreementDialog } from "@/components/holiday-lighting/HolidaySubscriptionAgreementDialog";
+import { HolidayCustomerPlanDialog } from "@/components/holiday-lighting/HolidayCustomerPlanDialog";
+import type { HolidayCustomerPlan } from "@/lib/holiday-lighting/strand-map";
 import type { HolidaySubscriptionAgreementData } from "@/lib/holiday-lighting/subscription-agreement";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import { hasPermanentLightingOption } from "@/lib/estimates/permanent-lighting";
@@ -80,6 +82,7 @@ type Estimate = {
     pricingMode?: string | null;
     recurringYearlyService?: boolean;
     cancellationFee?: number;
+    holidayPlan?: HolidayCustomerPlan | null;
     subscriptionAgreement?: HolidaySubscriptionAgreementData | null;
     leaseContractYears?: HolidayLeaseCommitmentYears | null;
     subtotal: number;
@@ -176,6 +179,7 @@ export function PortalEstimateView({
   >(null);
   const [cancellationPolicyOpen, setCancellationPolicyOpen] = useState(false);
   const [subscriptionAgreementOpen, setSubscriptionAgreementOpen] = useState(false);
+  const [holidayPlanOpen, setHolidayPlanOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -812,6 +816,21 @@ export function PortalEstimateView({
           </section>
         ) : null}
 
+        {activeOption?.holidayPlan ? (
+          <section className="flex flex-col gap-3 rounded-lg border bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="font-medium">Project plans</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Review the satellite measurements and proposed lighting markings.
+              </p>
+            </div>
+            <Button type="button" variant="outline" onClick={() => setHolidayPlanOpen(true)}>
+              <Map className="h-4 w-4" />
+              View Plans
+            </Button>
+          </section>
+        ) : null}
+
         {warrantyText ? (
           <section className="rounded-lg border bg-white p-4">
             <h2 className="mb-2 text-sm font-medium">Warranty</h2>
@@ -945,6 +964,15 @@ export function PortalEstimateView({
           onClose={() => setSubscriptionAgreementOpen(false)}
           agreement={activeSubscriptionAgreement}
           companyName={company.name}
+        />
+      ) : null}
+      {activeOption?.holidayPlan ? (
+        <HolidayCustomerPlanDialog
+          open={holidayPlanOpen}
+          onClose={() => setHolidayPlanOpen(false)}
+          plan={activeOption.holidayPlan}
+          estimateToken={token}
+          previewToken={previewToken}
         />
       ) : null}
       {requiresHolidayCard && cancellationPolicyOpen ? (

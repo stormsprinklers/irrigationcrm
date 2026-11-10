@@ -4,7 +4,11 @@ import {
   HOLIDAY_PERMANENT_DETAIL,
   holidayBuyBreakdownLines,
 } from "@/lib/holiday-lighting/pricing";
-import { holidayStrandMapFromMetadata } from "@/lib/holiday-lighting/strand-map";
+import {
+  customerHolidayPlan,
+  holidayStrandMapFromMetadata,
+  parseHolidayStrandMap,
+} from "@/lib/holiday-lighting/strand-map";
 import { HOLIDAY_PREVIEW_DISCLAIMER } from "@/lib/holiday-lighting/types";
 import { parseHolidayLeaseCommitmentYears } from "@/lib/holiday-lighting/lease-commitment";
 import { toNumber } from "@/lib/visits/totals";
@@ -297,6 +301,7 @@ export function serializePortalEstimate(estimate: {
       : typeof holidayOption?.recurringYearlyService === "boolean"
         ? holidayOption.recurringYearlyService
         : holidayRecurringService;
+    const optionStrandMap = parseHolidayStrandMap(holidayOption?.strandMap) ?? holidayStrandMap;
     return {
       id: option.id,
       letter: option.letter,
@@ -321,6 +326,7 @@ export function serializePortalEstimate(estimate: {
       displayNumber,
       pricingMode,
       recurringYearlyService,
+      holidayPlan: customerHolidayPlan(optionStrandMap, holidayOption?.billedLengthFt),
       cancellationFee:
         pricingMode !== "permanent" && Number.isFinite(rawCancellationFee) && rawCancellationFee >= 0
           ? Math.round(rawCancellationFee * 100) / 100

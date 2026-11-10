@@ -12,6 +12,8 @@ type Props = {
   /** Prefer purchase vs lease totals in the legend. */
   priceField?: "purchaseTotal" | "leaseTotal";
   className?: string;
+  showLegend?: boolean;
+  apiKey?: string;
 };
 
 function money(n: number) {
@@ -34,6 +36,8 @@ export function HolidayStrandMapViewer({
   mode,
   priceField = "purchaseTotal",
   className,
+  showLegend = true,
+  apiKey,
 }: Props) {
   const mapElement = useRef<HTMLDivElement>(null);
   const [mapError, setMapError] = useState("");
@@ -47,7 +51,7 @@ export function HolidayStrandMapViewer({
     setMapError("");
     setMapReady(false);
     if (!map.features.some((feature) => feature.paths.some((path) => path.length >= 2) || feature.placement)) return;
-    void loadGoogleMaps().then((googleApi) => {
+    void loadGoogleMaps(apiKey).then((googleApi) => {
       if (cancelled || !mapElement.current) return;
       const maps = googleApi.maps;
       const bounds = new maps.LatLngBounds();
@@ -103,7 +107,7 @@ export function HolidayStrandMapViewer({
       overlays.forEach((overlay) => overlay.setMap(null));
       if (googleMap) window.google?.maps.event.clearInstanceListeners(googleMap);
     };
-  }, [map]);
+  }, [apiKey, map]);
 
   if (!map.features.length) {
     return (
@@ -122,7 +126,7 @@ export function HolidayStrandMapViewer({
         </> : <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">No map geometry</div>}
       </div>
 
-      <ul className="mt-3 space-y-2">
+      {showLegend ? <ul className="mt-3 space-y-2">
         {map.features.map((feature) => {
           const subtitle = featureSubtitle(feature, mode, priceField);
           return (
@@ -153,7 +157,7 @@ export function HolidayStrandMapViewer({
           </li>
           );
         })}
-      </ul>
+      </ul> : null}
     </div>
   );
 }

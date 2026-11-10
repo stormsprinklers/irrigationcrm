@@ -51,6 +51,19 @@ export type HolidayStrandMap = {
   features: HolidayStrandMapFeature[];
 };
 
+export type HolidayCustomerPlan = {
+  version: 1;
+  address?: string;
+  center: HolidayLatLng | null;
+  totalEstimatedFeet: number;
+  features: Array<
+    Pick<
+      HolidayStrandMapFeature,
+      "id" | "label" | "color" | "paths" | "kind" | "placement"
+    >
+  >;
+};
+
 export function holidayStrandColorAt(index: number): string {
   return HOLIDAY_STRAND_COLORS[index % HOLIDAY_STRAND_COLORS.length]!;
 }
@@ -215,6 +228,42 @@ export function parseHolidayStrandMap(raw: unknown): HolidayStrandMap | null {
         typeof f.color === "string" &&
         Array.isArray(f.paths)
     ),
+  };
+}
+
+/** Customer-safe plan payload: geometry and total footage only. */
+export function customerHolidayPlan(
+  map: HolidayStrandMap | null,
+  totalEstimatedFeet?: unknown
+): HolidayCustomerPlan | null {
+  if (!map?.features.length) return null;
+  const hasSatelliteGeometry = map.features.some(
+    (feature) =>
+      Boolean(feature.placement) ||
+      feature.paths.some((path) => path.length >= 2)
+  );
+  if (!hasSatelliteGeometry) return null;
+  const suppliedTotal = Number(totalEstimatedFeet);
+  const calculatedTotal = map.features.reduce(
+    (sum, feature) => sum + (feature.kind === "placement" ? 0 : feature.lengthFt),
+    0
+  );
+  const total = Number.isFinite(suppliedTotal) && suppliedTotal >= 0
+    ? suppliedTotal
+    : calculatedTotal;
+  return {
+    version: 1,
+    address: map.address,
+    center: map.center,
+    totalEstimatedFeet: Math.round(total * 10) / 10,
+    features: map.features.map((feature) => ({
+      id: feature.id,
+      label: feature.label,
+      color: feature.color,
+      paths: feature.paths,
+      kind: feature.kind,
+      ...(feature.placement ? { placement: feature.placement } : {}),
+    })),
   };
 }
 
