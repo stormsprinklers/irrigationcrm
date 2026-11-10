@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { addHours, format } from "date-fns";
-import { CalendarClock, Loader2, Mail, MessageSquare } from "lucide-react";
+import { CalendarClock, CreditCard, Loader2, Mail, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,6 +66,8 @@ export function EstimatePostApprovalDialog({
   const [depositDue, setDepositDue] = useState(0);
   const [notifyCustomer, setNotifyCustomer] = useState(true);
   const [sendingInvoice, setSendingInvoice] = useState<"EMAIL" | "SMS" | null>(null);
+  const [chargingCardOnFile, setChargingCardOnFile] = useState(false);
+  const [confirmCardCharge, setConfirmCardCharge] = useState(false);
   const [billingStatus, setBillingStatus] = useState<SchedulingBillingStatus | null>(null);
   const [billingStatusError, setBillingStatusError] = useState<string | null>(null);
   const [waiveCardOnFile, setWaiveCardOnFile] = useState(false);
@@ -80,6 +82,8 @@ export function EstimatePostApprovalDialog({
     setDepositDue(0);
     setNotifyCustomer(true);
     setSendingInvoice(null);
+    setChargingCardOnFile(false);
+    setConfirmCardCharge(false);
     setBillingStatus(null);
     setBillingStatusError(null);
     setWaiveCardOnFile(false);
@@ -224,6 +228,45 @@ export function EstimatePostApprovalDialog({
     }
   }
 
+  async function chargeDepositToCardOnFile() {
+    if (!resultVisitId || depositDue <= 0 || chargingCardOnFile) return;
+
+    setChargingCardOnFile(true);
+    try {
+      const response = await fetch("/api/payments/card-on-file", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          visitId: resultVisitId,
+          amountType: "FIXED",
+          amountValue: depositDue,
+          amount: depositDue,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (data.code === "PAYMENT_REQUIRES_CUSTOMER" && typeof data.payLink === "string") {
+          await navigator.clipboard.writeText(data.payLink).catch(() => {});
+          toast.error(data.error ?? "Customer authentication is required", {
+            description: "The customer payment link was copied to your clipboard.",
+          });
+        } else {
+          toast.error(data.error ?? "The saved card could not be charged");
+        }
+        return;
+      }
+
+      toast.success(`${formatCurrency(Number(data.amount ?? depositDue))} charged to card on file`);
+      setConfirmCardCharge(false);
+      router.push(`/visits/${resultVisitId}`);
+      onClose();
+    } catch {
+      toast.error("The card charge could not be confirmed. Check the invoice before retrying.");
+    } finally {
+      setChargingCardOnFile(false);
+    }
+  }
+
   useEffect(() => {
     if (!open || initialMode !== "today" || autoRan.current) return;
     autoRan.current = true;
@@ -249,7 +292,7 @@ export function EstimatePostApprovalDialog({
         className="absolute inset-0 bg-black/40"
         aria-label="Close"
         onClick={() => {
-          if (!saving) onClose();
+          if (!saving && !chargingCardOnFile) onClose();
         }}
       />
       <div className="relative z-10 max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-lg border bg-background p-6 shadow-lg">
@@ -422,16 +465,67 @@ export function EstimatePostApprovalDialog({
               ).
             </p>
             <div className="mt-6 flex flex-col gap-2">
+              {billingStatus?.hasCardOnFile ? (
+                <>
+                  <Button
+                    type="button"
+                    disabled={Boolean(sendingInvoice) || chargingCardOnFile}
+                    onClick={() => setConfirmCardCharge(true)}
+                  >
+                    {chargingCardOnFile ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <CreditCard className="h-4 w-4" />
+                    )}
+                    Charge card on file · {formatCurrency(depositDue)}
+                  </Button>
+                  {confirmCardCharge ? (
+                    <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-left text-amber-950">
+                      <p className="font-semibold">
+                        Charge {formatCurrency(depositDue)} now?
+                      </p>
+                      <p className="mt-1 text-xs text-amber-900/80">
+                        This will charge the customer&apos;s saved card and apply the payment to the
+                        visit invoice.
+                      </p>
+                      <div className="mt-3 flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={chargingCardOnFile}
+                          onClick={() => setConfirmCardCharge(false)}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={chargingCardOnFile}
+                          onClick={() => void chargeDepositToCardOnFile()}
+                        >
+                          {chargingCardOnFile ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <CreditCard className="h-4 w-4" />
+                          )}
+                          Confirm charge
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
               <CollectPaymentButton
                 visitId={resultVisitId}
                 total={depositDue}
                 amount={depositDue}
-                disabled={Boolean(sendingInvoice)}
+                disabled={Boolean(sendingInvoice) || chargingCardOnFile}
               />
               <Button
                 type="button"
                 variant="outline"
-                disabled={Boolean(sendingInvoice) || !customerEmail}
+                disabled={Boolean(sendingInvoice) || chargingCardOnFile || !customerEmail}
                 onClick={() => void sendDepositInvoice("EMAIL")}
               >
                 {sendingInvoice === "EMAIL" ? (
@@ -444,7 +538,7 @@ export function EstimatePostApprovalDialog({
               <Button
                 type="button"
                 variant="outline"
-                disabled={Boolean(sendingInvoice) || !customerPhone}
+                disabled={Boolean(sendingInvoice) || chargingCardOnFile || !customerPhone}
                 onClick={() => void sendDepositInvoice("SMS")}
               >
                 {sendingInvoice === "SMS" ? (
@@ -463,7 +557,7 @@ export function EstimatePostApprovalDialog({
               <Button
                 type="button"
                 variant="outline"
-                disabled={Boolean(sendingInvoice)}
+                disabled={Boolean(sendingInvoice) || chargingCardOnFile}
                 onClick={() => {
                   router.push(`/visits/${resultVisitId}`);
                   onClose();
