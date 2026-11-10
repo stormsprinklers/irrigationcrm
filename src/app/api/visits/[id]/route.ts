@@ -16,8 +16,8 @@ import { prisma } from "@/lib/prisma";
 import { clearNeedsSchedulingForVisit } from "@/lib/estimates/scheduling";
 import { onVisitCancelled, onVisitCompleted, onVisitTimeChanged } from "@/lib/notifications/visit-events";
 import { getVisitForCompany, serializeVisitDetail } from "@/lib/visits/queries";
-import { validateAssignmentUpdate } from "@/lib/schedule/time-off";
-import { validateScheduledVisitAssignment } from "@/lib/schedule/visit-assignment";
+import { resolveCrewAssignmentUserIds, validateAssignmentUpdate } from "@/lib/schedule/time-off";
+import { requiresTechnicianAssignment, validateScheduledVisitAssignment } from "@/lib/schedule/visit-assignment";
 import { normalizeVisitAssigneeIds } from "@/lib/schedule/assignees";
 
 type Params = { params: Promise<{ id: string }> };
@@ -121,10 +121,25 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       );
     }
 
+    const crewAssigneeIds = nextCrewId
+      ? await resolveCrewAssignmentUserIds(user.companyId, nextCrewId)
+      : null;
+    if (nextCrewId && crewAssigneeIds === null) {
+      return NextResponse.json({ error: "Crew not found" }, { status: 400 });
+    }
+    const availabilityAssigneeIds = nextCrewId ? crewAssigneeIds ?? [] : nextAssignedUserIds;
+    const schedulingChanged =
+      body.startAt !== undefined ||
+      body.endAt !== undefined ||
+      assignmentChanged ||
+      body.crewId !== undefined ||
+      body.status !== undefined;
     const availabilityChecks = await Promise.all(
-      nextAssignedUserIds.map((employeeId) =>
-        validateAssignmentUpdate(user.companyId, employeeId, nextStart, nextEnd, id)
-      )
+      schedulingChanged && requiresTechnicianAssignment(nextStatus)
+        ? availabilityAssigneeIds.map((employeeId) =>
+            validateAssignmentUpdate(user.companyId, employeeId, nextStart, nextEnd, id)
+          )
+        : []
     );
     const availabilityError = availabilityChecks.find((result) => result.error)?.error;
     if (availabilityError) {

@@ -9,8 +9,8 @@ import { resolveServiceAreaByZip } from "@/lib/service-areas";
 import { jobInclude, listScheduleJobs, serializeJob } from "@/lib/schedule/queries";
 import type { ScheduleFilters } from "@/lib/schedule/types";
 import { onVisitTimeChanged } from "@/lib/notifications/visit-events";
-import { validateAssignmentUpdate } from "@/lib/schedule/time-off";
-import { validateScheduledVisitAssignment } from "@/lib/schedule/visit-assignment";
+import { resolveCrewAssignmentUserIds, validateAssignmentUpdate } from "@/lib/schedule/time-off";
+import { requiresTechnicianAssignment, validateScheduledVisitAssignment } from "@/lib/schedule/visit-assignment";
 import { syncVisitChecklists } from "@/lib/checklists/apply";
 import { syncCallbackTag } from "@/lib/checklists/callback";
 import { normalizeVisitAssigneeIds } from "@/lib/schedule/assignees";
@@ -157,10 +157,17 @@ export async function POST(request: NextRequest) {
 
     const jobStart = new Date(startAt);
     const jobEnd = new Date(endAt);
+    const crewAssigneeIds = crewId
+      ? await resolveCrewAssignmentUserIds(user.companyId, String(crewId))
+      : null;
+    if (crewId && crewAssigneeIds === null) return badRequestResponse("Crew not found");
+    const availabilityAssigneeIds = crewId ? crewAssigneeIds ?? [] : effectiveAssigneeIds;
     const availabilityChecks = await Promise.all(
-      effectiveAssigneeIds.map((employeeId) =>
-        validateAssignmentUpdate(user.companyId, employeeId, jobStart, jobEnd)
-      )
+      requiresTechnicianAssignment(nextStatus)
+        ? availabilityAssigneeIds.map((employeeId) =>
+            validateAssignmentUpdate(user.companyId, employeeId, jobStart, jobEnd)
+          )
+        : []
     );
     const assignmentErrorMessage = availabilityChecks.find((result) => result.error)?.error;
     if (assignmentErrorMessage) return badRequestResponse(assignmentErrorMessage);

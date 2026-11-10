@@ -734,24 +734,25 @@ export function EstimateDetail({ estimateId }: Props) {
             </Button>
           ) : null}
           {estimate.status === "APPROVED" ? (
-            <>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => openPostApproval("today")}
-                disabled={saving}
-              >
-                Complete Today
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => openPostApproval("schedule")}
-                disabled={saving}
-              >
-                Schedule Visit
-              </Button>
-            </>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => openPostApproval("today")}
+              disabled={saving}
+            >
+              Complete Today
+            </Button>
+          ) : null}
+          {estimate.status === "APPROVED" ||
+          (estimate.status === "SENT" && Boolean(estimate.signedAt)) ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => openPostApproval("schedule")}
+              disabled={saving}
+            >
+              Schedule Visit
+            </Button>
           ) : null}
           {estimate.status === "APPROVED" ||
           estimate.status === "CONVERTED" ||

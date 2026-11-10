@@ -7,8 +7,8 @@ import { resolveServiceAreaByZip } from "@/lib/service-areas";
 import { clearNeedsSchedulingForVisit } from "@/lib/estimates/scheduling";
 import { onVisitCancelled, onVisitTimeChanged } from "@/lib/notifications/visit-events";
 import { jobInclude, serializeJob } from "@/lib/schedule/queries";
-import { validateAssignmentUpdate } from "@/lib/schedule/time-off";
-import { validateScheduledVisitAssignment } from "@/lib/schedule/visit-assignment";
+import { resolveCrewAssignmentUserIds, validateAssignmentUpdate } from "@/lib/schedule/time-off";
+import { requiresTechnicianAssignment, validateScheduledVisitAssignment } from "@/lib/schedule/visit-assignment";
 import { normalizeVisitAssigneeIds } from "@/lib/schedule/assignees";
 
 type Params = { params: Promise<{ id: string }> };
@@ -70,10 +70,23 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       return badRequestResponse("Assign either a crew or individual technicians, not both");
     }
 
+    const crewAssigneeIds = nextCrewId
+      ? await resolveCrewAssignmentUserIds(user.companyId, nextCrewId)
+      : null;
+    if (nextCrewId && crewAssigneeIds === null) return badRequestResponse("Crew not found");
+    const availabilityAssigneeIds = nextCrewId ? crewAssigneeIds ?? [] : nextAssignedUserIds;
+    const schedulingChanged =
+      body.startAt !== undefined ||
+      body.endAt !== undefined ||
+      assignmentChanged ||
+      body.crewId !== undefined ||
+      body.status !== undefined;
     const availabilityChecks = await Promise.all(
-      nextAssignedUserIds.map((employeeId) =>
-        validateAssignmentUpdate(user.companyId, employeeId, nextStart, nextEnd, id)
-      )
+      schedulingChanged && requiresTechnicianAssignment(nextStatus)
+        ? availabilityAssigneeIds.map((employeeId) =>
+            validateAssignmentUpdate(user.companyId, employeeId, nextStart, nextEnd, id)
+          )
+        : []
     );
     const availabilityError = availabilityChecks.find((result) => result.error)?.error;
     if (availabilityError) return badRequestResponse(availabilityError);

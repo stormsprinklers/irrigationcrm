@@ -24,6 +24,7 @@ import {
   parseScheduleCrewColumnId,
   scheduleCrewColumnId,
 } from "@/lib/schedule/columns";
+import { assignScheduleLanes } from "@/lib/schedule/lane-layout";
 import {
   isWorkingOnDay,
   offWindowsForDay,
@@ -95,28 +96,8 @@ function getJobColumnIds(job: ScheduleJobDTO) {
   return [job.assignedUser?.id ?? "__unassigned__"];
 }
 
-function assignLanes(jobs: ScheduleJobDTO[]) {
-  const sorted = [...jobs].sort(
-    (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
-  );
-  const laneEnds: number[] = [];
-
-  return sorted.map((job) => {
-    const start = new Date(job.startAt).getTime();
-    const end = new Date(job.endAt).getTime();
-    let lane = laneEnds.findIndex((laneEnd) => laneEnd <= start);
-    if (lane === -1) {
-      lane = laneEnds.length;
-      laneEnds.push(end);
-    } else {
-      laneEnds[lane] = end;
-    }
-    return { job, lane, laneCount: laneEnds.length };
-  });
-}
-
 function jobLocation(job: ScheduleJobDTO) {
-  return [job.city, job.state].filter(Boolean).join(", ") || job.serviceArea?.name || "No area";
+  return job.city || job.property?.city || job.customer?.city || "No city";
 }
 
 function jobAddress(job: ScheduleJobDTO) {
@@ -645,7 +626,7 @@ function TimeGrid({
     ? ((now.getHours() + now.getMinutes() / 60 - startHour) / totalHours) * gridHeight
     : null;
 
-  const multiDayLanes = useMemo(() => assignLanes(multiDayJobs), [multiDayJobs]);
+  const multiDayLanes = useMemo(() => assignScheduleLanes(multiDayJobs), [multiDayJobs]);
   const multiDayRowHeight =
     multiDayJobs.length > 0
       ? Math.max(MULTI_DAY_ROW_HEIGHT, multiDayLanes.length * MULTI_DAY_ROW_HEIGHT)
@@ -862,7 +843,7 @@ function TimeGrid({
                         return startOfDay(new Date(job.startAt)).toDateString() === dayKey;
                       });
                       const offDay = !columnIsWorking(col, day, workSchedules);
-                      const laidOut = assignLanes(colJobs);
+                      const laidOut = assignScheduleLanes(colJobs);
 
                       return (
                         <div
@@ -924,7 +905,7 @@ function TimeGrid({
               const dayJobs = hourlyJobs.filter(
                 (job) => startOfDay(new Date(job.startAt)).toDateString() === dayKey
               );
-              const laidOut = assignLanes(dayJobs);
+              const laidOut = assignScheduleLanes(dayJobs);
 
               return (
                 <div

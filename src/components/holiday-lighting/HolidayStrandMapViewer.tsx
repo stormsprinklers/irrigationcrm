@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { HolidayStrandMap, HolidayStrandMapFeature } from "@/lib/holiday-lighting/strand-map";
 import { loadGoogleMaps } from "@/lib/holiday-lighting/load-maps";
+import { holidayMapRenderKey } from "@/lib/holiday-lighting/map-viewer";
 
 type Mode = "customer" | "installer";
 
@@ -40,23 +41,27 @@ export function HolidayStrandMapViewer({
   apiKey,
 }: Props) {
   const mapElement = useRef<HTMLDivElement>(null);
+  const latestMap = useRef(map);
+  latestMap.current = map;
+  const mapRenderKey = holidayMapRenderKey(map);
   const [mapError, setMapError] = useState("");
   const [mapReady, setMapReady] = useState(false);
 
   useEffect(() => {
+    const mapData = latestMap.current;
     let cancelled = false;
     let timeout: ReturnType<typeof setTimeout> | null = null;
     let googleMap: google.maps.Map | null = null;
     const overlays: Array<google.maps.Polyline | google.maps.Circle> = [];
     setMapError("");
     setMapReady(false);
-    if (!map.features.some((feature) => feature.paths.some((path) => path.length >= 2) || feature.placement)) return;
+    if (!mapData.features.some((feature) => feature.paths.some((path) => path.length >= 2) || feature.placement)) return;
     void loadGoogleMaps(apiKey).then((googleApi) => {
       if (cancelled || !mapElement.current) return;
       const maps = googleApi.maps;
       const bounds = new maps.LatLngBounds();
       googleMap = new maps.Map(mapElement.current, {
-        center: map.center ?? { lat: 39.5, lng: -111.5 },
+        center: mapData.center ?? { lat: 39.5, lng: -111.5 },
         zoom: 20,
         maxZoom: 20,
         mapTypeId: "satellite",
@@ -65,7 +70,7 @@ export function HolidayStrandMapViewer({
         fullscreenControl: false,
         gestureHandling: "cooperative",
       });
-      for (const feature of map.features) {
+      for (const feature of mapData.features) {
         for (const path of feature.paths) {
           if (path.length < 2) continue;
           path.forEach((point) => bounds.extend(point));
@@ -107,7 +112,7 @@ export function HolidayStrandMapViewer({
       overlays.forEach((overlay) => overlay.setMap(null));
       if (googleMap) window.google?.maps.event.clearInstanceListeners(googleMap);
     };
-  }, [apiKey, map]);
+  }, [apiKey, mapRenderKey]);
 
   if (!map.features.length) {
     return (

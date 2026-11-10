@@ -1,4 +1,4 @@
-import { TimeOffStatus } from "@prisma/client";
+import { TimeOffStatus, VisitStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { assignmentOffMessage, defaultEmployeeWorkSchedule } from "@/lib/schedule/open-time-slots";
 import type { TimeOffRequestDTO, WorkScheduleDayDTO } from "@/lib/schedule/time-off-types";
@@ -24,16 +24,16 @@ export function classifyAssignmentAvailability(input: {
     };
   }
 
-  const warnings = [
-    input.offScheduleWarning,
-    input.conflictingVisitTitle
-      ? `Double-booking warning: ${input.employeeName} is already assigned to "${input.conflictingVisitTitle}" during this time. The visit was scheduled anyway.`
-      : null,
-  ].filter((warning): warning is string => Boolean(warning));
+  if (input.conflictingVisitTitle) {
+    return {
+      error: `${input.employeeName} is already assigned to "${input.conflictingVisitTitle}" during this time. Choose a different time or technician.`,
+      warning: null,
+    };
+  }
 
   return {
     error: null,
-    warning: warnings.length ? warnings.join(" ") : null,
+    warning: input.offScheduleWarning ?? null,
   };
 }
 
@@ -194,15 +194,27 @@ export async function assertEmployeeAvailableForAssignment(
   ]);
   if (!employee) return { error: "Employee not found", warning: null };
 
-  const approvedTimeOff = await prisma.timeOffRequest.findFirst({
-    where: {
-      companyId,
-      userId,
-      status: TimeOffStatus.APPROVED,
-      startAt: { lt: endAt },
-      endAt: { gt: startAt },
-    },
-  });
+  const [approvedTimeOff, crewAssignments] = await Promise.all([
+    prisma.timeOffRequest.findFirst({
+      where: {
+        companyId,
+        userId,
+        status: TimeOffStatus.APPROVED,
+        startAt: { lt: endAt },
+        endAt: { gt: startAt },
+      },
+    }),
+    prisma.crew.findMany({
+      where: {
+        companyId,
+        OR: [
+          { foremanUserId: userId },
+          { members: { some: { userId } } },
+        ],
+      },
+      select: { id: true },
+    }),
+  ]);
   if (approvedTimeOff) {
     return classifyAssignmentAvailability({
       employeeName: employee.name,
@@ -220,13 +232,15 @@ export async function assertEmployeeAvailableForAssignment(
     startParts.minutes
   );
 
+  const crewIds = crewAssignments.map((crew) => crew.id);
   const conflictWhere = {
     companyId,
     OR: [
       { assignedUserId: userId },
       { additionalAssignees: { some: { userId } } },
+      ...(crewIds.length ? [{ crewId: { in: crewIds } }] : []),
     ],
-    status: { not: "CANCELLED" as const },
+    status: { notIn: [VisitStatus.CANCELLED, VisitStatus.UNSCHEDULED] },
     startAt: { lt: endAt },
     endAt: { gt: startAt },
     ...(excludeVisitId ? { id: { not: excludeVisitId } } : {}),
@@ -241,6 +255,27 @@ export async function assertEmployeeAvailableForAssignment(
     offScheduleWarning: offMessage,
     conflictingVisitTitle: conflict?.title,
   });
+}
+
+export async function resolveCrewAssignmentUserIds(
+  companyId: string,
+  crewId: string
+): Promise<string[] | null> {
+  const crew = await prisma.crew.findFirst({
+    where: { id: crewId, companyId },
+    select: {
+      foremanUserId: true,
+      members: { select: { userId: true } },
+    },
+  });
+  if (!crew) return null;
+
+  return [
+    ...new Set([
+      ...(crew.foremanUserId ? [crew.foremanUserId] : []),
+      ...crew.members.map((member) => member.userId),
+    ]),
+  ];
 }
 
 export async function validateAssignmentUpdate(
