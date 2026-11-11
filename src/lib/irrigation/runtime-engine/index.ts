@@ -1,4 +1,6 @@
 export type {
+  AddressParity,
+  AddressRestrictionSummary,
   CalculatePropertyRuntimeParams,
   ControllerProgram,
   ControllerProgramGuide,
@@ -8,8 +10,11 @@ export type {
   GrassSeason,
   ProgramId,
   ProgramZoneEntry,
+  PropertyLocationContext,
   PropertyScheduleSettings,
   RuntimeBreakdown,
+  ScheduleMode,
+  SundayPolicy,
   WeatherInput,
   ZoneRuntimeInput,
   ZoneRuntimeResult,
@@ -74,4 +79,18 @@ export {
   WATERING_WINDOW,
 } from "./programs/build-controller-guide";
 
-export { zoneInputFromMapZone, propertySettingsFromRecord } from "./adapters";
+export { zoneInputFromMapZone, propertySettingsFromRecord, propertyLocationFromRecord } from "./adapters";
+
+export {
+  parseStreetNumber,
+  addressParityFromNumber,
+  addressParityFromAddress,
+} from "./restrictions/address-parity";
+
+export {
+  CITY_WATERING_RULES,
+  lookupCityWateringRule,
+  resolveCityAddressSchedule,
+  pickDaysFromAssigned,
+  scheduleModeLabel,
+} from "./restrictions/city-watering-rules";
