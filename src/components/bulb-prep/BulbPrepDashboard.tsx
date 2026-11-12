@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, CheckCircle2, CircleDot, MapPin } from "lucide-react";
+import { CalendarDays, CheckCircle2, ChevronDown, CircleDot, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { ClockInOutButton } from "@/components/home/ClockInOutButton";
 import { ContentArea } from "@/components/layout/ContentArea";
@@ -21,6 +21,7 @@ type BulbPrepJob = {
   bulbColor: string;
   strandColor: string;
   linearFeet: number | null;
+  notes: string[];
   completed: boolean;
   completedAt: string | null;
   completedBy: string | null;
@@ -31,6 +32,7 @@ export function BulbPrepDashboard({ name }: { name: string }) {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [windowDays, setWindowDays] = useState(90);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
 
   const load = useCallback(async () => {
     try {
@@ -87,6 +89,15 @@ export function BulbPrepDashboard({ name }: { name: string }) {
     }
   }
 
+  function toggleNotes(jobId: string) {
+    setExpandedIds((current) => {
+      const next = new Set(current);
+      if (next.has(jobId)) next.delete(jobId);
+      else next.add(jobId);
+      return next;
+    });
+  }
+
   return (
     <ContentArea className="mx-auto max-w-5xl pb-10">
       <div className="mb-6">
@@ -135,10 +146,10 @@ export function BulbPrepDashboard({ name }: { name: string }) {
           ) : (
             <div className="space-y-3">
               {jobs.map((job) => (
-                <label
+                <div
                   key={job.id}
                   className={cn(
-                    "flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-colors",
+                    "flex items-start gap-3 rounded-lg border p-4 transition-colors",
                     job.completed
                       ? "border-green-200 bg-green-50/70 dark:border-green-900 dark:bg-green-950/30"
                       : "bg-card hover:bg-muted/30",
@@ -185,6 +196,38 @@ export function BulbPrepDashboard({ name }: { name: string }) {
                       </div>
                     </div>
 
+                    {job.notes.length ? (
+                      <div className="mt-3 border-t pt-3">
+                        <button
+                          type="button"
+                          className="flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                          aria-expanded={expandedIds.has(job.id)}
+                          aria-controls={`bulb-prep-notes-${job.id}`}
+                          onClick={() => toggleNotes(job.id)}
+                        >
+                          <ChevronDown
+                            className={cn(
+                              "h-4 w-4 transition-transform",
+                              expandedIds.has(job.id) && "rotate-180"
+                            )}
+                          />
+                          {expandedIds.has(job.id) ? "Hide job notes" : `Job notes (${job.notes.length})`}
+                        </button>
+                        {expandedIds.has(job.id) ? (
+                          <div
+                            id={`bulb-prep-notes-${job.id}`}
+                            className="mt-2 space-y-2 rounded-md bg-background/80 p-3 text-sm"
+                          >
+                            {job.notes.map((note, index) => (
+                              <p key={`${job.id}-note-${index}`} className="whitespace-pre-wrap">
+                                {note}
+                              </p>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+
                     {job.completed ? (
                       <p className="mt-2 flex items-center gap-1 text-xs text-green-700 dark:text-green-400">
                         <CheckCircle2 className="h-3.5 w-3.5" />
@@ -197,7 +240,7 @@ export function BulbPrepDashboard({ name }: { name: string }) {
                       </p>
                     )}
                   </div>
-                </label>
+                </div>
               ))}
             </div>
           )}

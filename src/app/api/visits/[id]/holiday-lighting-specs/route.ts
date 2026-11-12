@@ -1,21 +1,26 @@
 import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
-import { badRequestResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import {
+  badRequestResponse,
+  forbiddenResponse,
+  requireSessionUser,
+  unauthorizedResponse,
+} from "@/lib/api-auth";
 import { requireFieldVisitAccess } from "@/lib/field/visit-guard";
-import { HOLIDAY_STRAND_COLORS } from "@/lib/holiday-lighting/types";
+import { canEditVisitHolidayLightingSpecs } from "@/lib/holiday-lighting/spec-permissions";
+import {
+  HolidayLightingSpecError,
+  parseHolidayLightingSpecPatch,
+  updateHolidayLightingSpecs,
+} from "@/lib/holiday-lighting/specs";
 import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ id: string }> };
 
-function record(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null;
-}
-
 export async function PATCH(request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
+    if (!canEditVisitHolidayLightingSpecs(user.role)) return forbiddenResponse();
     const { id } = await params;
     const access = await requireFieldVisitAccess(user, id);
     if (!access.ok) return access.response;
@@ -25,45 +30,25 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       select: { designExportMetadata: true },
     });
     if (!visit) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    const metadata = record(visit.designExportMetadata);
-    if (!metadata || metadata.source !== "holiday-lighting-quote") {
-      return badRequestResponse("This visit is not linked to a holiday lighting estimate");
-    }
-
-    const body = await request.json();
-    const next = { ...metadata } as Record<string, unknown>;
-    next.visitSpecsUpdated = true;
-    if (body.strandColor !== undefined) {
-      if (!HOLIDAY_STRAND_COLORS.includes(body.strandColor)) {
-        return badRequestResponse("Strand color must be Black, White, or Green");
-      }
-      next.strandColor = body.strandColor;
-    }
-    if (body.colorPattern !== undefined) {
-      const colorPattern = String(body.colorPattern).trim();
-      if (!colorPattern || colorPattern.length > 120 || /^other$/i.test(colorPattern)) {
-        return badRequestResponse("Enter a specific light color or pattern");
-      }
-      next.colorPattern = colorPattern;
-      const strandMap = record(next.strandMap);
-      if (strandMap && Array.isArray(strandMap.features)) {
-        next.strandMap = {
-          ...strandMap,
-          features: strandMap.features.map((feature) => {
-            const item = record(feature);
-            return item ? { ...item, bulbColors: colorPattern } : feature;
-          }),
-        };
-      }
-    }
-
-    const designExportMetadata = next as Prisma.InputJsonObject;
+    const patch = parseHolidayLightingSpecPatch(await request.json().catch(() => ({})));
+    const designExportMetadata = updateHolidayLightingSpecs(
+      visit.designExportMetadata,
+      patch,
+      { markVisitOverride: true }
+    ) as Prisma.InputJsonObject;
     await prisma.visit.update({
       where: { id },
       data: { designExportMetadata },
     });
     return NextResponse.json({ designExportMetadata });
-  } catch {
+  } catch (error) {
+    if (error instanceof HolidayLightingSpecError) {
+      return badRequestResponse(error.message);
+    }
+    if (!(error instanceof Error) || error.message !== "Unauthorized") {
+      console.error("[visits/holiday-lighting-specs] update failed", error);
+      return NextResponse.json({ error: "Failed to update lighting specs" }, { status: 500 });
+    }
     return unauthorizedResponse();
   }
 }

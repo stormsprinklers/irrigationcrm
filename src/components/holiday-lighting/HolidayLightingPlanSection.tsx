@@ -1,5 +1,6 @@
 "use client";
 
+import type { Prisma } from "@prisma/client";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { HolidayStrandMapViewer } from "@/components/holiday-lighting/HolidayStrandMapViewer";
@@ -8,7 +9,7 @@ import {
   type HolidayStrandMap,
 } from "@/lib/holiday-lighting/strand-map";
 import { blobProxyUrl } from "@/lib/blob/urls";
-import { holidayVisitJobSummary } from "@/lib/holiday-lighting/visit-plan";
+import { holidayVisitJobSummary, holidayVisitPlan } from "@/lib/holiday-lighting/visit-plan";
 import { HOLIDAY_COLOR_PATTERNS, HOLIDAY_STRAND_COLORS } from "@/lib/holiday-lighting/types";
 
 type SummaryLineItem = {
@@ -24,6 +25,10 @@ type Props = {
   description?: string;
   lineItems?: SummaryLineItem[];
   visitId?: string;
+  estimateId?: string;
+  estimateOptionId?: string;
+  optionLetter?: string | null;
+  editable?: boolean;
   onMetadataUpdated?: (metadata: Record<string, unknown>) => void;
 };
 
@@ -35,18 +40,28 @@ export function HolidayLightingPlanSection({
   description,
   lineItems = [],
   visitId,
+  estimateId,
+  estimateOptionId,
+  optionLetter,
+  editable = true,
   onMetadataUpdated,
 }: Props) {
+  const selectedMetadata = optionLetter
+    ? holidayVisitPlan(
+        designExportMetadata as Prisma.JsonValue | null,
+        optionLetter
+      ) ?? designExportMetadata
+    : designExportMetadata;
   const strandMap: HolidayStrandMap | null = holidayStrandMapFromMetadata(
-    designExportMetadata ?? null
+    selectedMetadata ?? null
   );
   const previewUrl =
-    typeof designExportMetadata?.previewImageUrl === "string"
-      ? designExportMetadata.previewImageUrl
+    typeof selectedMetadata?.previewImageUrl === "string"
+      ? selectedMetadata.previewImageUrl
       : null;
 
   const showMap = mode === "installer";
-  const jobSummary = holidayVisitJobSummary(designExportMetadata, lineItems);
+  const jobSummary = holidayVisitJobSummary(selectedMetadata, lineItems);
   const summaryColor = jobSummary?.colors[0] ?? "";
   const [strandColor, setStrandColor] = useState(jobSummary?.strandColor ?? "");
   const [colorPattern, setColorPattern] = useState(summaryColor);
@@ -61,13 +76,21 @@ export function HolidayLightingPlanSection({
   }, [jobSummary?.strandColor, summaryColor]);
 
   async function saveSpecs(next: { strandColor?: string; colorPattern?: string }) {
-    if (!visitId) return;
+    const endpoint = visitId
+      ? `/api/visits/${visitId}/holiday-lighting-specs`
+      : estimateId && estimateOptionId
+        ? `/api/estimates/${estimateId}/holiday-lighting-specs`
+        : null;
+    if (!endpoint || !editable) return;
     setSavingSpecs(true);
     try {
-      const response = await fetch(`/api/visits/${visitId}/holiday-lighting-specs`, {
+      const response = await fetch(endpoint, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(next),
+        body: JSON.stringify({
+          ...next,
+          ...(estimateOptionId ? { optionId: estimateOptionId } : {}),
+        }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error ?? "Could not update lighting specs");
@@ -83,8 +106,8 @@ export function HolidayLightingPlanSection({
     ...new Set(strandMap?.features.map((feature) => feature.lightStyleLabel) ?? []),
   ];
   const notes =
-    typeof designExportMetadata?.notes === "string"
-      ? designExportMetadata.notes.trim()
+    typeof selectedMetadata?.notes === "string"
+      ? selectedMetadata.notes.trim()
       : "";
   if (!previewUrl && !(showMap && (strandMap || jobSummary))) return null;
 
@@ -144,7 +167,7 @@ export function HolidayLightingPlanSection({
               </p>
             </div>
           </div>
-          {visitId ? (
+          {editable && (visitId || (estimateId && estimateOptionId)) ? (
             <div className="grid gap-3 rounded-lg border border-amber-300 bg-white p-3 sm:grid-cols-2">
               <label className="text-xs font-semibold text-slate-700">
                 Strand color
@@ -211,8 +234,8 @@ export function HolidayLightingPlanSection({
             className="max-h-72 w-full rounded-md border border-border object-cover"
           />
           <p className="text-xs text-muted-foreground">
-            {typeof designExportMetadata?.previewDisclaimer === "string"
-              ? designExportMetadata.previewDisclaimer
+            {typeof selectedMetadata?.previewDisclaimer === "string"
+              ? selectedMetadata.previewDisclaimer
               : "This preview is AI generated and is not a guarantee of exact light placement."}
           </p>
         </div>

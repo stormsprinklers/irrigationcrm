@@ -38,6 +38,7 @@ import { Input } from "@/components/ui/input";
 import { formatEstimateLineQtyPrice } from "@/lib/estimates/format-line";
 import { MAX_ESTIMATE_OPTIONS } from "@/lib/estimates/limits";
 import { hasPermanentLightingOption } from "@/lib/estimates/permanent-lighting";
+import { canEditEstimateHolidayLightingSpecs } from "@/lib/holiday-lighting/spec-permissions";
 import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import type { PriceBookItemDTO } from "@/lib/price-book/types";
@@ -1014,6 +1015,15 @@ export function EstimateDetail({ estimateId }: Props) {
             <HolidayLightingPlanSection
               designExportMetadata={estimate.designExportMetadata as Record<string, unknown>}
               mode="installer"
+              estimateId={estimate.id}
+              estimateOptionId={activeOption?.id}
+              optionLetter={activeOption?.letter}
+              editable={canEditEstimateHolidayLightingSpecs(session?.user?.role)}
+              onMetadataUpdated={(designExportMetadata) =>
+                setEstimate((current) =>
+                  current ? { ...current, designExportMetadata } : current
+                )
+              }
               priceField={
                 activeOption?.label?.toLowerCase().includes("lease")
                   ? "leaseTotal"

@@ -36,6 +36,7 @@ import { requestCurrentPosition } from "@/lib/maps/geolocation";
 import { useMaintenancePlansFeatures, useIrrigationFeatures } from "@/components/layout/CompanyBrandProvider";
 import type { VisitEtaDisplay } from "@/components/visits/TimeTrackingBar";
 import { canAccessInvoices } from "@/lib/invoices/permissions";
+import { canEditVisitHolidayLightingSpecs } from "@/lib/holiday-lighting/spec-permissions";
 
 type VisitDetailData = {
   id: string;
@@ -468,6 +469,7 @@ export function VisitDetail({ visitId }: Props) {
         "holiday-lighting-quote" ? (
         <HolidayLightingPlanSection
           visitId={visit.id}
+          editable={canEditVisitHolidayLightingSpecs(session?.user?.role)}
           designExportMetadata={visit.designExportMetadata as Record<string, unknown>}
           mode="installer"
           title="Holiday lighting job specs"

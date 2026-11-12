@@ -11,12 +11,28 @@ import {
   formatInTimezone,
   startOfZonedDay,
 } from "@/lib/datetime/zoned";
-import { holidayVisitJobSummary } from "@/lib/holiday-lighting/visit-plan";
+import { holidayVisitJobSummary, holidayVisitPlan } from "@/lib/holiday-lighting/visit-plan";
 import { prisma } from "@/lib/prisma";
 import { writeStaffAuditLog } from "@/lib/audit/staff-audit";
 
 function canUseBulbPrepDashboard(role: string) {
   return role === UserRole.BULB_PREP;
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function uniqueJobNotes(values: Array<string | null | undefined>) {
+  const seen = new Set<string>();
+  return values.flatMap((value) => {
+    const note = value?.trim();
+    if (!note || seen.has(note)) return [];
+    seen.add(note);
+    return [note];
+  });
 }
 
 export async function GET() {
@@ -51,16 +67,29 @@ export async function GET() {
         title: true,
         startAt: true,
         city: true,
+        workSummary: true,
         designExportMetadata: true,
         bulbPrepCompletedAt: true,
         bulbPrepCompletedBy: { select: { name: true } },
         customer: { select: { name: true, city: true } },
         property: { select: { city: true } },
         lineItems: { select: { name: true, description: true } },
+        notes: {
+          orderBy: { createdAt: "asc" },
+          select: { body: true },
+        },
       },
     });
 
     const jobs = visits.map((visit) => {
+      const metadata = record(visit.designExportMetadata);
+      const optionLetter =
+        typeof metadata?.approvedOptionLetter === "string"
+          ? metadata.approvedOptionLetter
+          : "A";
+      const plan = metadata?.visitSpecsUpdated === true
+        ? metadata
+        : record(holidayVisitPlan(visit.designExportMetadata, optionLetter));
       const specs = holidayVisitJobSummary(
         visit.designExportMetadata,
         visit.lineItems
@@ -83,6 +112,11 @@ export async function GET() {
         bulbColor: specs?.colorLabel ?? "Not specified",
         strandColor: specs?.strandColor ?? "Not specified",
         linearFeet: specs?.totalFeet ?? null,
+        notes: uniqueJobNotes([
+          visit.workSummary,
+          typeof plan?.notes === "string" ? plan.notes : null,
+          ...visit.notes.map((note) => note.body),
+        ]),
         completed: Boolean(visit.bulbPrepCompletedAt),
         completedAt: visit.bulbPrepCompletedAt?.toISOString() ?? null,
         completedBy: visit.bulbPrepCompletedBy?.name ?? null,
