@@ -67,6 +67,7 @@ const ROLES = [
   "SALES",
   "MARKETER",
   "SOCIAL_MEDIA_MANAGER",
+  "BULB_PREP",
   "AFFILIATE",
 ] as const;
 const PAY_TYPES = ["", "HOURLY", "COMMISSION", "HYBRID", "SALARY"] as const;
@@ -294,7 +295,7 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    if (isAdmin && password) {
+    if (employee && isAdmin && password) {
       if (password.length < 8) {
         toast.error("Password must be at least 8 characters");
         return;
@@ -374,11 +375,6 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
         onlineBookingEnabled: form.onlineBookingEnabled,
       };
 
-      if (!employee && isAdmin && password) {
-        payload.password = password;
-        payload.confirmPassword = confirmPassword;
-      }
-
       const url = employee ? `/api/settings/employees/${employee.id}` : "/api/settings/employees";
       const method = employee ? "PATCH" : "POST";
       const res = await fetch(url, {
@@ -400,14 +396,12 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
             onClick: () => void navigator.clipboard.writeText(data.affiliateSignInUrl),
           },
         });
-      } else if (data.tempPassword) {
-        toast.message("Employee created. Copy the temporary login password.", {
-          description: data.tempPassword,
-          duration: 30_000,
-          action: {
-            label: "Copy",
-            onClick: () => void navigator.clipboard.writeText(data.tempPassword),
-          },
+      } else if (!employee && data.setupEmailSent) {
+        toast.success("Employee created and account setup email sent");
+      } else if (!employee && data.setupEmailSent === false) {
+        toast.warning("Employee created, but the setup email could not be sent", {
+          description: data.setupEmailError ?? "They can use Forgot password once email delivery is available.",
+          duration: 12_000,
         });
       } else if (employee && isAdmin && password) {
         toast.success("Employee updated and login password set");
@@ -545,8 +539,11 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
           <Input type="email" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} required />
         </div>
         <div>
-          <label className="text-sm font-medium">Phone</label>
+          <label className="text-sm font-medium">Phone (optional)</label>
           <Input value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Used for SMS verification. Without a phone, sign-in codes are sent by email.
+          </p>
         </div>
         <div>
           <label className="text-sm font-medium">Title</label>
@@ -747,24 +744,30 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
         </div>
       </div>
 
-      {isAdmin ? (
+      {!employee ? (
+        <div className="rounded-md border border-border bg-muted/30 p-4">
+          <h3 className="text-sm font-semibold">Login access</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            We&apos;ll email this employee a secure link to choose their password. They can receive
+            sign-in verification codes by email, or by SMS when a phone number is provided.
+          </p>
+        </div>
+      ) : isAdmin ? (
         <div className="rounded-md border border-border p-4">
           <h3 className="text-sm font-semibold">Login access</h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            {employee
-              ? "Set a new password for this employee to sign in. Leave blank to keep their current password."
-              : "Set a password for this employee, or leave blank to generate a secure temporary password."}
+            Set a new password for this employee to sign in. Leave blank to keep their current password.
           </p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="text-sm font-medium">{employee ? "New password" : "Password"}</label>
+              <label className="text-sm font-medium">New password</label>
               <Input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="new-password"
                 minLength={8}
-                placeholder={employee ? "Leave unchanged" : "At least 8 characters"}
+                placeholder="Leave unchanged"
               />
             </div>
             <div>
@@ -775,7 +778,7 @@ export function EmployeeForm({ employee, serviceAreas, onSaved, onCancel }: Prop
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 autoComplete="new-password"
                 minLength={8}
-                placeholder={employee ? "Leave unchanged" : "Repeat password"}
+                placeholder="Leave unchanged"
               />
             </div>
           </div>

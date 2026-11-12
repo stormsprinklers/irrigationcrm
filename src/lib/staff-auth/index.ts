@@ -14,6 +14,7 @@ import { getCompanyCallerId } from "@/lib/voice/company-phone";
 const MFA_TTL_MS = 10 * 60 * 1000;
 const MFA_MAX_ATTEMPTS = 5;
 const RESET_TTL_MS = 60 * 60 * 1000;
+const SETUP_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const TICKET_TTL = "3m";
 
 export type StaffAuthUser = Pick<
@@ -616,7 +617,15 @@ export async function requestPasswordReset(
   returnTo?: string | null,
   requestOrigin?: string | null
 ) {
-  const users = await findActiveStaffAccountsByEmail(email);
+  const users = await prisma.user.findMany({
+    where: {
+      email: email.toLowerCase().trim(),
+      status: "ACTIVE",
+      systemKind: null,
+    },
+    select: { id: true, email: true },
+    orderBy: { createdAt: "asc" },
+  });
   // Always return success wording to avoid account enumeration.
   if (!users.length) return { ok: true as const };
 
@@ -654,6 +663,60 @@ export async function requestPasswordReset(
   return { ok: true as const };
 }
 
+export type SendStaffSetupEmailResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+/** Send a newly-created employee a one-time link to choose their own password. */
+export async function sendStaffSetupEmail(
+  userId: string,
+  requestOrigin?: string | null
+): Promise<SendStaffSetupEmailResult> {
+  const user = await prisma.user.findFirst({
+    where: { id: userId, status: "ACTIVE", systemKind: null },
+    select: { id: true, email: true },
+  });
+  if (!user) return { ok: false, error: "Employee account was not found." };
+
+  const from = getDefaultFromEmail();
+  if (!from || !isEmailConfigured()) {
+    return {
+      ok: false,
+      error: "Outbound email is not configured. The employee can use Forgot password after email is configured.",
+    };
+  }
+
+  const raw = randomBytes(32).toString("hex");
+  const token = await prisma.passwordResetToken.create({
+    data: {
+      userId: user.id,
+      tokenHash: hashOpaque(raw),
+      expiresAt: new Date(Date.now() + SETUP_TTL_MS),
+    },
+  });
+
+  const base = getAppBaseUrl(requestOrigin);
+  const setupUrl = `${base}${buildResetPasswordPath(raw, "/login")}`;
+
+  try {
+    await sendEmail({
+      from,
+      to: [user.email],
+      subject: "Set up your Storm Sprinklers account",
+      text: `Your Storm Sprinklers staff account is ready. Choose your password using this link (expires in 7 days):\n\n${setupUrl}\n\nAfter setting your password, sign in with your email. Verification codes can be sent by email or SMS.`,
+      html: `<p>Your Storm Sprinklers staff account is ready.</p><p><a href="${setupUrl}">Choose your password and sign in</a></p><p>This link expires in 7 days. After setting your password, sign in with your email. Verification codes can be sent by email or SMS.</p>`,
+    });
+  } catch (error) {
+    await prisma.passwordResetToken.delete({ where: { id: token.id } }).catch(() => undefined);
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Could not send the account setup email.",
+    };
+  }
+
+  return { ok: true };
+}
+
 export async function resetStaffPassword(rawToken: string, newPassword: string) {
   if (newPassword.length < 8) {
     return { ok: false as const, error: "Password must be at least 8 characters." };
@@ -681,6 +744,7 @@ export async function resetStaffPassword(rawToken: string, newPassword: string) 
     },
     select: { id: true },
   });
+  const siblingIds = siblings.map((sib) => sib.id);
 
   await prisma.$transaction([
     ...siblings.map((sib) =>
@@ -689,8 +753,8 @@ export async function resetStaffPassword(rawToken: string, newPassword: string) 
         data: { passwordHash },
       })
     ),
-    prisma.passwordResetToken.update({
-      where: { id: row.id },
+    prisma.passwordResetToken.updateMany({
+      where: { userId: { in: siblingIds }, usedAt: null },
       data: { usedAt: new Date() },
     }),
   ]);

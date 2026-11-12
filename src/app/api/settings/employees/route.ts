@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
-import { randomBytes } from "node:crypto";
 import { EmployeeStatus, UserRole } from "@prisma/client";
 import { badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
-import { canManageEmployees, canSetEmployeePassword, employeeSelectFields, parseEmployeeNameFields, redactEmployeeForRole, resolveEmployeeDivision, validateEmployeePassword } from "@/lib/employees";
+import { canManageEmployees, employeeSelectFields, parseEmployeeNameFields, redactEmployeeForRole, resolveEmployeeDivision } from "@/lib/employees";
 import { resolveCreateEmployeePay } from "@/lib/compensation/defaults";
 import { pushEmployeeToLms } from "@/lib/integrations/lms-sync";
 import { generateReviewNameAliases, REVIEW_ALIAS_ROLES } from "@/lib/google-business/review-aliases";
 import { prisma } from "@/lib/prisma";
 import { createAffiliateSignInLink } from "@/lib/affiliate/sign-in";
+import { sendStaffSetupEmail } from "@/lib/staff-auth";
 
 export async function GET(request: NextRequest) {
   try {
@@ -40,11 +39,6 @@ export async function POST(request: NextRequest) {
     const employeeRole = (role as UserRole) ?? UserRole.CSR;
 
     if (!email) return badRequestResponse("Email is required");
-    if (employeeRole !== UserRole.AFFILIATE && (!phone || !String(phone).trim())) {
-      return badRequestResponse(
-        "Mobile phone is required for SMS two-factor authentication",
-      );
-    }
 
     const nameFields = parseEmployeeNameFields({ firstName, lastName, name });
     if ("error" in nameFields) return badRequestResponse(nameFields.error);
@@ -53,24 +47,6 @@ export async function POST(request: NextRequest) {
       where: { companyId: user.companyId, email: String(email).toLowerCase() },
     });
     if (existing) return badRequestResponse("Email already in use at this company");
-
-    const generatedPassword = body.password == null || String(body.password).length === 0;
-    let plainPassword = generatedPassword ? randomBytes(18).toString("base64url") : "";
-    if (body.password != null && String(body.password).length > 0) {
-      if (!canSetEmployeePassword(user.role)) {
-        return forbiddenResponse("Only admins can set a custom login password");
-      }
-      plainPassword = String(body.password);
-      const passwordError = validateEmployeePassword(plainPassword);
-      if (passwordError) return badRequestResponse(passwordError);
-      const confirmPassword =
-        body.confirmPassword != null ? String(body.confirmPassword) : plainPassword;
-      if (plainPassword !== confirmPassword) {
-        return badRequestResponse("Passwords do not match");
-      }
-    }
-
-    const passwordHash = await bcrypt.hash(plainPassword, 10);
 
     const company = await prisma.company.findUniqueOrThrow({
       where: { id: user.companyId },
@@ -114,7 +90,9 @@ export async function POST(request: NextRequest) {
         websiteTeamSlug: websiteTeamSlug ? String(websiteTeamSlug) : null,
         onlineBookingEnabled:
           employeeRole === UserRole.AFFILIATE ? false : Boolean(body.onlineBookingEnabled),
-        passwordHash,
+        // The setup email lets the employee choose their password. Until then,
+        // password login remains disabled for this account.
+        passwordHash: null,
         serviceAreas: serviceAreaIds?.length
           ? {
               create: serviceAreaIds.map((serviceAreaId: string) => ({ serviceAreaId })),
@@ -162,13 +140,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const setupEmail = employeeRole === UserRole.AFFILIATE
+      ? null
+      : await sendStaffSetupEmail(employee.id, request.nextUrl.origin).catch((error) => ({
+          ok: false as const,
+          error: error instanceof Error ? error.message : "Could not send the account setup email.",
+        }));
+
     return NextResponse.json(
       {
         ...(refreshed ?? employee),
         lmsSyncStatus: lmsSync ? (lmsSync.ok ? "synced" : "error") : null,
         lmsSyncError: lmsSync && !lmsSync.ok ? lmsSync.error : undefined,
-        tempPassword:
-          generatedPassword && employeeRole !== UserRole.AFFILIATE ? plainPassword : undefined,
+        setupEmailSent: setupEmail?.ok ?? undefined,
+        setupEmailError: setupEmail && !setupEmail.ok ? setupEmail.error : undefined,
         affiliateSignInUrl,
         affiliateSignInExpiresAt,
       },

@@ -16,6 +16,7 @@ enum UserRole {
   SALES
   MARKETER
   SOCIAL_MEDIA_MANAGER
+  BULB_PREP
   AFFILIATE
 }
 
@@ -1079,6 +1080,7 @@ model User {
   assignedVisits             Visit[]                    @relation("AssignedVisits")
   additionalVisitAssignments VisitAssignee[]
   createdVisits              Visit[]                    @relation("CreatedVisits")
+  bulbPrepCompletedVisits    Visit[]                    @relation("BulbPrepCompletedBy")
   assignedLeads              Lead[]                     @relation("AssignedLeads")
   affiliateCustomers         Customer[]                 @relation("AffiliateCustomers")
   affiliateCredentials       IntegrationCredential[]    @relation("AffiliateIntegrationOwner")
@@ -3180,6 +3182,8 @@ model Visit {
   designExportMetadata   Json?
   installDurationDays    Int?
   estimateId             String?
+  bulbPrepCompletedAt    DateTime?
+  bulbPrepCompletedById  String?
   createdAt              DateTime    @default(now())
   updatedAt              DateTime    @updatedAt
 
@@ -3190,6 +3194,7 @@ model Visit {
   assignedUser            User?                    @relation("AssignedVisits", fields: [assignedUserId], references: [id], onDelete: SetNull)
   additionalAssignees     VisitAssignee[]
   createdByUser           User?                    @relation("CreatedVisits", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  bulbPrepCompletedBy     User?                    @relation("BulbPrepCompletedBy", fields: [bulbPrepCompletedById], references: [id], onDelete: SetNull)
   crew                    Crew?                    @relation(fields: [crewId], references: [id], onDelete: SetNull)
   maintenancePlanVisit    MaintenancePlanVisit?    @relation(fields: [maintenancePlanVisitId], references: [id], onDelete: SetNull)
   timeEvents              VisitTimeEvent[]
@@ -3213,6 +3218,7 @@ model Visit {
   @@index([serviceAreaId])
   @@index([assignedUserId])
   @@index([createdByUserId])
+  @@index([bulbPrepCompletedById])
   @@index([crewId])
   @@index([customerId])
   @@map("ScheduledJob")

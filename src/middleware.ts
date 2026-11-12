@@ -4,6 +4,7 @@ import { getAuthSecret } from "@/lib/auth-secret";
 import { PORTAL_SESSION_COOKIE } from "@/lib/portal/constants";
 import { enforceBrowserMutationOrigin } from "@/lib/security/csrf";
 import { affiliatePathAllowed } from "@/lib/affiliate/access";
+import { bulbPrepPathAllowed } from "@/lib/bulb-prep/access";
 
 const publicPaths = [
   "/",
@@ -129,6 +130,15 @@ export async function middleware(request: NextRequest) {
     }
     if (!pathname.startsWith("/api/") && !affiliatePathAllowed(pathname)) {
       return withNoIndex(NextResponse.redirect(new URL("/affiliate", request.url)));
+    }
+  }
+
+  if (token.role === "BULB_PREP") {
+    if (pathname.startsWith("/api/") && !bulbPrepPathAllowed(pathname)) {
+      return withNoIndex(NextResponse.json({ error: "Forbidden" }, { status: 403 }));
+    }
+    if (!pathname.startsWith("/api/") && !bulbPrepPathAllowed(pathname)) {
+      return withNoIndex(NextResponse.redirect(new URL("/home", request.url)));
     }
   }
 

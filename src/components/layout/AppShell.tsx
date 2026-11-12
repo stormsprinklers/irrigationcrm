@@ -10,6 +10,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { cookies } from "next/headers";
 import { auth } from "@/lib/auth";
 import { AffiliateNav } from "@/components/affiliate/AffiliateNav";
+import { BulbPrepNav } from "@/components/bulb-prep/BulbPrepNav";
 
 export async function AppShell({ children }: { children: React.ReactNode }) {
   const mobile = (await cookies()).get("crm-mobile-shell")?.value === "1";
@@ -20,6 +21,18 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
         <AffiliateNav name={session.user.name} />
         <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
       </div>
+    );
+  }
+  if (session?.user?.role === "BULB_PREP") {
+    return (
+      <CompanyBrandProvider>
+        <TooltipProvider delayDuration={200}>
+          <div className="flex h-dvh max-h-dvh flex-col overflow-hidden bg-page">
+            <BulbPrepNav name={session.user.name} />
+            <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
+          </div>
+        </TooltipProvider>
+      </CompanyBrandProvider>
     );
   }
   // Keep native Twilio calling in charge while using field web tools.

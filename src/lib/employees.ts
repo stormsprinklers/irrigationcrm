@@ -9,6 +9,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   SALES: "Sales",
   MARKETER: "Marketer",
   SOCIAL_MEDIA_MANAGER: "Social Media Manager",
+  BULB_PREP: "Bulb Prep",
   AFFILIATE: "Affiliate",
 };
 
@@ -21,6 +22,7 @@ export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
   SALES: "Manage leads, estimates, and customer sales pipeline",
   MARKETER: "View marketing performance and all reports, including calls, leads, LTV, and estimates",
   SOCIAL_MEDIA_MANAGER: "Create and schedule social posts; submit content for admin review",
+  BULB_PREP: "Clock in and prepare bulbs for upcoming holiday-lighting jobs",
   AFFILIATE: "Import attributed customers and view only their own affiliate pipeline and revenue",
 };
 
@@ -31,6 +33,10 @@ export function isMarketerRole(role: string | null | undefined) {
 /** Field roles with limited office/admin access (service techs and installers). */
 export function isFieldRole(role: string) {
   return role === "TECH" || role === "INSTALLER";
+}
+
+export function isBulbPrepRole(role: string | null | undefined) {
+  return role === "BULB_PREP";
 }
 
 /** Roles allowed to use the Storm CRM iOS / mobile app. */

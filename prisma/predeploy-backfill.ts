@@ -363,6 +363,31 @@ async function ensureMarketerRole() {
   await prisma.$executeRawUnsafe(`ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'MARKETER'`);
 }
 
+async function ensureBulbPrepSchema() {
+  await prisma.$executeRawUnsafe(
+    `ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'BULB_PREP'`
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "ScheduledJob" ADD COLUMN IF NOT EXISTS "bulbPrepCompletedAt" TIMESTAMP(3)`
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "ScheduledJob" ADD COLUMN IF NOT EXISTS "bulbPrepCompletedById" TEXT`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "ScheduledJob_bulbPrepCompletedById_idx" ON "ScheduledJob"("bulbPrepCompletedById")`
+  );
+  try {
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE "ScheduledJob" ADD CONSTRAINT "ScheduledJob_bulbPrepCompletedById_fkey" FOREIGN KEY ("bulbPrepCompletedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE`
+    );
+  } catch (error) {
+    if (!(error instanceof Error) || !/already exists|duplicate/i.test(error.message)) {
+      throw error;
+    }
+  }
+  console.log("Ensured Bulb Prep role and visit completion fields");
+}
+
 /**
  * Keep the generated Prisma client compatible with the database before any
  * model query runs. Affiliate fields are selected implicitly by ordinary
@@ -1042,6 +1067,7 @@ async function main() {
   // This must stay first: generated Prisma model queries include affiliate
   // fields even when the feature itself is not being used.
   await ensureAffiliateSchema();
+  await ensureBulbPrepSchema();
   await ensureEstimateSenderAttribution();
   await ensureMarketerRole();
   await ensureSalesPipeline();
