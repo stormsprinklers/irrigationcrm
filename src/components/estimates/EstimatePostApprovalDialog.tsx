@@ -2,12 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { addHours, format } from "date-fns";
+import { addDays, addHours, format } from "date-fns";
 import { CalendarClock, CreditCard, Loader2, Mail, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CollectPaymentButton } from "@/components/payments/CollectPaymentButton";
+import { EmployeeMultiSelect } from "@/components/schedule/EmployeeMultiSelect";
+import { SchedulePeekModal } from "@/components/schedule/SchedulePeekModal";
+import type { ScheduleSlotClick } from "@/lib/schedule/quick-add";
 
 type Props = {
   open: boolean;
@@ -30,6 +33,28 @@ type SchedulingBillingStatus = {
   hasCardOnFile: boolean;
   cardCheckFailed: boolean;
   canWaiveCardOnFile: boolean;
+};
+
+type TechnicianOption = {
+  id: string;
+  name: string;
+  role: string;
+};
+
+type TechnicianScheduleEntry = {
+  id: string;
+  kind: "VISIT" | "TIME_OFF";
+  title: string;
+  startAt: string;
+  endAt: string;
+  customerName: string | null;
+  city: string | null;
+};
+
+type TechnicianDayPreview = {
+  id: string;
+  name: string;
+  entries: TechnicianScheduleEntry[];
 };
 
 function formatCurrency(value: number) {
@@ -71,6 +96,13 @@ export function EstimatePostApprovalDialog({
   const [billingStatus, setBillingStatus] = useState<SchedulingBillingStatus | null>(null);
   const [billingStatusError, setBillingStatusError] = useState<string | null>(null);
   const [waiveCardOnFile, setWaiveCardOnFile] = useState(false);
+  const [technicians, setTechnicians] = useState<TechnicianOption[]>([]);
+  const [assignedUserIds, setAssignedUserIds] = useState<string[]>([]);
+  const [techniciansLoading, setTechniciansLoading] = useState(false);
+  const [schedulePreview, setSchedulePreview] = useState<TechnicianDayPreview[]>([]);
+  const [schedulePreviewLoading, setSchedulePreviewLoading] = useState(false);
+  const [schedulePreviewError, setSchedulePreviewError] = useState<string | null>(null);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const autoRan = useRef(false);
 
   useEffect(() => {
@@ -87,6 +119,10 @@ export function EstimatePostApprovalDialog({
     setBillingStatus(null);
     setBillingStatusError(null);
     setWaiveCardOnFile(false);
+    setAssignedUserIds([]);
+    setSchedulePreview([]);
+    setSchedulePreviewError(null);
+    setScheduleOpen(false);
     const start = addHours(new Date(), 24);
     setStartLocal(toLocalInputValue(start));
     setEndLocal(toLocalInputValue(addHours(start, 2)));
@@ -113,7 +149,69 @@ export function EstimatePostApprovalDialog({
           error instanceof Error ? error.message : "Could not check payment status"
         );
       });
+    setTechniciansLoading(true);
+    fetch("/api/schedule/filters")
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error ?? "Could not load technicians");
+        const options = Array.isArray(data.employees)
+          ? data.employees.filter(
+              (employee: TechnicianOption) =>
+                employee.role === "TECH" || employee.role === "INSTALLER"
+            )
+          : [];
+        setTechnicians(options);
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : "Could not load technicians");
+        setTechnicians([]);
+      })
+      .finally(() => setTechniciansLoading(false));
   }, [open, initialMode, estimateId]);
+
+  const scheduleDate = startLocal.slice(0, 10);
+
+  useEffect(() => {
+    if (!open || step !== "schedule" || !scheduleDate || !assignedUserIds.length) {
+      setSchedulePreview([]);
+      setSchedulePreviewError(null);
+      setSchedulePreviewLoading(false);
+      return;
+    }
+
+    const dayStart = new Date(`${scheduleDate}T00:00:00`);
+    if (Number.isNaN(dayStart.getTime())) return;
+    const dayEnd = addDays(dayStart, 1);
+    const params = new URLSearchParams({
+      start: dayStart.toISOString(),
+      end: dayEnd.toISOString(),
+    });
+    for (const userId of assignedUserIds) params.append("userIds", userId);
+
+    const controller = new AbortController();
+    setSchedulePreviewLoading(true);
+    setSchedulePreviewError(null);
+    fetch(`/api/schedule/technician-day-preview?${params}`, {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error ?? "Could not load technician schedules");
+        setSchedulePreview(data.technicians ?? []);
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setSchedulePreviewError(
+          error instanceof Error ? error.message : "Could not load technician schedules"
+        );
+        setSchedulePreview([]);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setSchedulePreviewLoading(false);
+      });
+    return () => controller.abort();
+  }, [assignedUserIds, open, scheduleDate, step]);
 
   const previewDeposit = useMemo(() => {
     if (estimateTotal <= threshold) return 0;
@@ -140,6 +238,7 @@ export function EstimatePostApprovalDialog({
           startAt: startAt.toISOString(),
           endAt: endAt.toISOString(),
           division: "SERVICE",
+          assignedUserIds,
         };
         body.notifyCustomer = notifyCustomer;
         body.waiveCardOnFile = waiveCardOnFile;
@@ -166,6 +265,7 @@ export function EstimatePostApprovalDialog({
 
       setResultVisitId(data.visitId);
       onConverted(data.visitId);
+      if (data.warning) toast.warning(data.warning);
 
       if (timing === "today") {
         toast.success("Line items added to today's visit");
@@ -281,9 +381,37 @@ export function EstimatePostApprovalDialog({
   );
   const scheduleDisabled =
     saving ||
+    assignedUserIds.length === 0 ||
     !billingStatus ||
     Boolean(billingStatusError) ||
     (requiresCardWaiver && (!billingStatus.canWaiveCardOnFile || !waiveCardOnFile));
+
+  function applyScheduleSlot(slot: ScheduleSlotClick) {
+    const nextStart = slot.startAt;
+    setStartLocal(toLocalInputValue(nextStart));
+    setEndLocal(toLocalInputValue(addHours(nextStart, 2)));
+    if (
+      slot.assignedUserId &&
+      slot.assignedUserId !== "__unassigned__" &&
+      technicians.some((technician) => technician.id === slot.assignedUserId)
+    ) {
+      setAssignedUserIds((current) => [
+        slot.assignedUserId!,
+        ...current.filter((id) => id !== slot.assignedUserId),
+      ]);
+    }
+  }
+
+  function overlapsProposedTime(entry: TechnicianScheduleEntry) {
+    const proposedStart = new Date(startLocal);
+    const proposedEnd = new Date(endLocal);
+    return (
+      !Number.isNaN(proposedStart.getTime()) &&
+      !Number.isNaN(proposedEnd.getTime()) &&
+      new Date(entry.startAt) < proposedEnd &&
+      new Date(entry.endAt) > proposedStart
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -295,7 +423,7 @@ export function EstimatePostApprovalDialog({
           if (!saving && !chargingCardOnFile) onClose();
         }}
       />
-      <div className="relative z-10 max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-lg border bg-background p-6 shadow-lg">
+      <div className="relative z-10 max-h-[calc(100vh-2rem)] w-full max-w-2xl overflow-y-auto rounded-lg border bg-background p-6 shadow-lg">
         {initialMode === "today" && step === "timing" ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -355,6 +483,103 @@ export function EstimatePostApprovalDialog({
                   value={endLocal}
                   onChange={(e) => setEndLocal(e.target.value)}
                 />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Assigned technicians</label>
+                {techniciansLoading ? (
+                  <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading technicians…
+                  </div>
+                ) : (
+                  <EmployeeMultiSelect
+                    values={assignedUserIds}
+                    employees={technicians}
+                    onValuesChange={setAssignedUserIds}
+                    placeholder="Choose one or more technicians"
+                  />
+                )}
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Required. The first selected technician is the primary assignee.
+                </p>
+              </div>
+
+              <div className="rounded-md border p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium">Technician schedule preview</p>
+                    <p className="text-xs text-muted-foreground">
+                      {scheduleDate
+                        ? format(new Date(`${scheduleDate}T12:00:00`), "EEEE, MMMM d")
+                        : "Choose a date"}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setScheduleOpen(true)}
+                  >
+                    <CalendarClock className="h-4 w-4" />
+                    Full schedule
+                  </Button>
+                </div>
+                {!assignedUserIds.length ? (
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    Select technicians to preview their visits and approved time off.
+                  </p>
+                ) : schedulePreviewLoading ? (
+                  <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading schedules…
+                  </div>
+                ) : schedulePreviewError ? (
+                  <p className="mt-3 text-sm text-destructive">{schedulePreviewError}</p>
+                ) : (
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    {schedulePreview.map((technician) => (
+                      <div key={technician.id} className="rounded-md bg-muted/40 p-3">
+                        <p className="text-sm font-semibold">{technician.name}</p>
+                        {technician.entries.length ? (
+                          <div className="mt-2 space-y-2">
+                            {technician.entries.map((entry) => {
+                              const conflict = overlapsProposedTime(entry);
+                              return (
+                                <div
+                                  key={`${technician.id}-${entry.kind}-${entry.id}`}
+                                  className={
+                                    conflict
+                                      ? "rounded border border-destructive/40 bg-destructive/5 px-2 py-1.5 text-xs"
+                                      : "rounded border bg-background px-2 py-1.5 text-xs"
+                                  }
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <span className="font-medium">
+                                      {entry.kind === "TIME_OFF" ? "Time off" : entry.title}
+                                    </span>
+                                    {conflict ? (
+                                      <span className="font-semibold text-destructive">Conflict</span>
+                                    ) : null}
+                                  </div>
+                                  <p className="text-muted-foreground">
+                                    {format(new Date(entry.startAt), "h:mm a")}–
+                                    {format(new Date(entry.endAt), "h:mm a")}
+                                    {entry.customerName ? ` · ${entry.customerName}` : ""}
+                                    {entry.city ? ` · ${entry.city}` : ""}
+                                  </p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            No visits or approved time off on this day.
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
                 {previewDeposit > 0 ? (
@@ -428,6 +653,12 @@ export function EstimatePostApprovalDialog({
                 </span>
               </label>
             </div>
+            <SchedulePeekModal
+              open={scheduleOpen}
+              date={scheduleDate}
+              onClose={() => setScheduleOpen(false)}
+              onSelectSlot={applyScheduleSlot}
+            />
             <div className="mt-6 flex justify-end gap-2">
               {initialMode === "choose" ? (
                 <Button

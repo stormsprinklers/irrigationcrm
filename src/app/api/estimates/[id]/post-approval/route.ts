@@ -1,7 +1,7 @@
 import { holidayVisitPlan } from "@/lib/holiday-lighting/visit-plan";
 import { isHolidayLightingCompany } from "@/lib/company/industry";
 import { NextRequest, NextResponse } from "next/server";
-import { Division, VisitStatus } from "@prisma/client";
+import { Division, UserRole, VisitStatus } from "@prisma/client";
 import { addHours } from "date-fns";
 import {
   badRequestResponse,
@@ -15,11 +15,12 @@ import { computeDeferredVisitDeposit } from "@/lib/estimates/deferred-visit-depo
 import { prisma } from "@/lib/prisma";
 import { resolveServiceAreaByZip } from "@/lib/service-areas";
 import { validateScheduledVisitAssignment } from "@/lib/schedule/visit-assignment";
+import { normalizeVisitAssigneeIds } from "@/lib/schedule/assignees";
 import { toNumber } from "@/lib/visits/totals";
 import { defaultEstimateVisitTitle } from "@/lib/estimates/visit-title";
 import { onVisitTimeChanged } from "@/lib/notifications/visit-events";
 import { attachEstimateInvoicesToVisit } from "@/lib/estimates/attach-invoices-to-visit";
-import { canManageTeamSchedule } from "@/lib/schedule/time-off";
+import { canManageTeamSchedule, validateAssignmentUpdate } from "@/lib/schedule/time-off";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -168,6 +169,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     let visitId: string;
     let depositDue = 0;
+    let assignmentWarning: string | null = null;
     const depositMeta = computeDeferredVisitDeposit(visitTotal, estimate.company);
     const defaultVisitTitle = defaultEstimateVisitTitle(estimate.designExportMetadata);
 
@@ -188,7 +190,7 @@ export async function POST(request: NextRequest, { params }: Params) {
           title: defaultVisitTitle,
           startAt: new Date(),
           endAt: addHours(new Date(), 2),
-          assignedUserId: user.id,
+          assignedUserIds: [user.id],
           division: Division.SERVICE,
         });
         if ("error" in created) return badRequestResponse(created.error);
@@ -210,6 +212,48 @@ export async function POST(request: NextRequest, { params }: Params) {
         return badRequestResponse("schedule.endAt must be after startAt");
       }
 
+      const assignedUserIds = normalizeVisitAssigneeIds(
+        schedule.assignedUserIds,
+        schedule.assignedUserId
+      );
+      if (assignedUserIds.length > 20) {
+        return badRequestResponse("A visit can have up to 20 assigned technicians");
+      }
+      if (schedule.crewId) {
+        return badRequestResponse(
+          "Choose individual technicians when scheduling from an estimate"
+        );
+      }
+      const assignmentError = validateScheduledVisitAssignment(
+        VisitStatus.SCHEDULED,
+        assignedUserIds[0] ?? null
+      );
+      if (assignmentError) return badRequestResponse(assignmentError);
+
+      const technicians = await prisma.user.findMany({
+        where: {
+          id: { in: assignedUserIds },
+          companyId: user.companyId,
+          status: "ACTIVE",
+          role: { in: [UserRole.TECH, UserRole.INSTALLER] },
+        },
+        select: { id: true },
+      });
+      if (technicians.length !== assignedUserIds.length) {
+        return badRequestResponse("Choose active technicians or installers for this visit");
+      }
+
+      const availabilityChecks = await Promise.all(
+        assignedUserIds.map((employeeId) =>
+          validateAssignmentUpdate(user.companyId, employeeId, startAt, endAt)
+        )
+      );
+      const availabilityError = availabilityChecks.find((result) => result.error)?.error;
+      if (availabilityError) return badRequestResponse(availabilityError);
+      const availabilityWarnings = availabilityChecks
+        .map((result) => result.warning)
+        .filter((warning): warning is string => Boolean(warning));
+
       const created = await createScheduledVisitFromEstimate({
         companyId: user.companyId,
         estimate,
@@ -219,7 +263,7 @@ export async function POST(request: NextRequest, { params }: Params) {
             : defaultVisitTitle,
         startAt,
         endAt,
-        assignedUserId: schedule.assignedUserId ?? user.id,
+        assignedUserIds,
         division: (schedule.division as Division) || Division.SERVICE,
         serviceAreaId: schedule.serviceAreaId,
         zip: schedule.zip,
@@ -231,6 +275,9 @@ export async function POST(request: NextRequest, { params }: Params) {
       if ("error" in created) return badRequestResponse(created.error);
       visitId = created.visitId;
       depositDue = depositMeta.depositDue;
+      if (availabilityWarnings.length) {
+        assignmentWarning = availabilityWarnings.join(" ");
+      }
     }
 
     await prisma.visitLineItem.deleteMany({ where: { visitId } });
@@ -313,6 +360,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       depositThreshold: depositMeta.threshold,
       depositPercent: depositMeta.percent,
       cardOnFileWaived,
+      warning: assignmentWarning,
     });
   } catch {
     return unauthorizedResponse();
@@ -341,7 +389,7 @@ async function createScheduledVisitFromEstimate(params: {
   title: string;
   startAt: Date;
   endAt: Date;
-  assignedUserId: string | null;
+  assignedUserIds: string[];
   division: Division;
   serviceAreaId?: string | null;
   zip?: string | null;
@@ -369,7 +417,7 @@ async function createScheduledVisitFromEstimate(params: {
 
   const assignmentError = validateScheduledVisitAssignment(
     VisitStatus.SCHEDULED,
-    params.assignedUserId
+    params.assignedUserIds[0] ?? null
   );
   if (assignmentError) return { error: assignmentError };
 
@@ -387,7 +435,13 @@ async function createScheduledVisitFromEstimate(params: {
       division: holiday ? Division.HOLIDAY_LIGHTS : params.division,
       designExportMetadata: plan?.designExportMetadata ?? undefined,
       serviceAreaId,
-      assignedUserId: params.assignedUserId,
+      assignedUserId: params.assignedUserIds[0] ?? null,
+      additionalAssignees:
+        params.assignedUserIds.length > 1
+          ? {
+              create: params.assignedUserIds.slice(1).map((userId) => ({ userId })),
+            }
+          : undefined,
       crewId: params.crewId ?? null,
       address:
         params.address ??
