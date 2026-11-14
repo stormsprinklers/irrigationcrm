@@ -94,16 +94,26 @@ export function VisitScheduleSection({
   const [saving, setSaving] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [notifyCustomer, setNotifyCustomer] = useState(true);
+  const persistedAssigneeIds = assignedUsers.length
+    ? assignedUsers.map((employee) => employee.id)
+    : assignedUser
+      ? [assignedUser.id]
+      : [];
+  const persistedAssigneeKey = persistedAssigneeIds.join("|");
 
   useEffect(() => {
     setVisitTitle(title);
+  }, [title]);
+
+  useEffect(() => {
     setDate(toDateInput(startAt));
     setStartTime(toTimeInput(startAt));
     setEndTime(toTimeInput(endAt));
-    setAssignedUserIds(
-      assignedUsers.length ? assignedUsers.map((employee) => employee.id) : assignedUser ? [assignedUser.id] : []
-    );
-  }, [title, startAt, endAt, assignedUser, assignedUsers]);
+  }, [startAt, endAt]);
+
+  useEffect(() => {
+    setAssignedUserIds(persistedAssigneeKey ? persistedAssigneeKey.split("|") : []);
+  }, [persistedAssigneeKey]);
 
   useEffect(() => {
     if (!canEdit) return;

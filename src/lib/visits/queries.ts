@@ -117,8 +117,12 @@ export const visitDetailInclude = {
 } satisfies Prisma.VisitInclude;
 
 type VisitPayload = Prisma.VisitGetPayload<{ include: typeof visitInclude }>;
+type VisitProperty = NonNullable<VisitPayload["property"]>;
 
-export function serializeVisit(visit: VisitPayload): VisitDTO {
+function serializeVisitWithProperty(
+  visit: VisitPayload,
+  resolvedProperty: VisitProperty | null
+): VisitDTO {
   const subtotal = sumLineItems(visit.lineItems ?? []);
   const discountTotal = sumDiscounts(subtotal, visit.discounts ?? []);
   const assignedUsers = [
@@ -140,7 +144,7 @@ export function serializeVisit(visit: VisitPayload): VisitDTO {
     state: visit.state,
     zip: visit.zip,
     customer: visit.customer,
-    property: visit.property,
+    property: resolvedProperty,
     serviceArea: visit.serviceArea,
     assignedUser: visit.assignedUser,
     assignedUsers,
@@ -156,6 +160,51 @@ export function serializeVisit(visit: VisitPayload): VisitDTO {
     enRouteEtaAt: visit.enRouteEtaAt?.toISOString() ?? null,
     enRouteCalculatedAt: visit.enRouteCalculatedAt?.toISOString() ?? null,
   };
+}
+
+export function serializeVisit(visit: VisitPayload): VisitDTO {
+  return serializeVisitWithProperty(visit, visit.property);
+}
+
+/**
+ * A migrated visit may only be linked to a customer, while its address lives on
+ * that customer's primary property. Visit detail already resolves that fallback;
+ * do the same in list/schedule payloads so cards do not incorrectly show “No city”.
+ */
+export async function serializeVisits(visits: VisitPayload[]): Promise<VisitDTO[]> {
+  const customerIds = [
+    ...new Set(
+      visits
+        .filter((visit) => !visit.property && visit.customerId)
+        .map((visit) => visit.customerId as string)
+    ),
+  ];
+
+  if (!customerIds.length) return visits.map((visit) => serializeVisit(visit));
+
+  const fallbackProperties = await prisma.customerProperty.findMany({
+    where: {
+      companyId: visits[0].companyId,
+      customerId: { in: customerIds },
+    },
+    orderBy: [{ isPrimary: "desc" }, { name: "asc" }],
+    select: { ...visitInclude.property.select, customerId: true },
+  });
+  const propertyByCustomerId = new Map<string, VisitProperty>();
+  for (const property of fallbackProperties) {
+    const { customerId, ...visitProperty } = property;
+    if (!propertyByCustomerId.has(customerId)) {
+      propertyByCustomerId.set(customerId, visitProperty);
+    }
+  }
+
+  return visits.map((visit) =>
+    serializeVisitWithProperty(
+      visit,
+      visit.property ??
+        (visit.customerId ? propertyByCustomerId.get(visit.customerId) ?? null : null)
+    )
+  );
 }
 
 function buildVisitWhere(
@@ -227,7 +276,7 @@ export async function listVisitsForCompany(
     orderBy: { startAt: "desc" },
     take: 200,
   });
-  return visits.map(serializeVisit);
+  return serializeVisits(visits);
 }
 
 export async function listVisits(
@@ -242,7 +291,7 @@ export async function listVisits(
     include: visitInclude,
     orderBy: { startAt: "asc" },
   });
-  return visits.map(serializeVisit);
+  return serializeVisits(visits);
 }
 
 export async function getScheduleSummary(

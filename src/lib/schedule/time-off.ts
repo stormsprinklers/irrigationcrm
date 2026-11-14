@@ -25,9 +25,12 @@ export function classifyAssignmentAvailability(input: {
   }
 
   if (input.conflictingVisitTitle) {
+    const conflictWarning = `${input.employeeName} is already assigned to "${input.conflictingVisitTitle}" during this time. This technician will be double-booked.`;
     return {
-      error: `${input.employeeName} is already assigned to "${input.conflictingVisitTitle}" during this time. Choose a different time or technician.`,
-      warning: null,
+      error: null,
+      warning: input.offScheduleWarning
+        ? `${conflictWarning} ${input.offScheduleWarning}`
+        : conflictWarning,
     };
   }
 

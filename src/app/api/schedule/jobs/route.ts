@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     // Field roles must not see company-wide board; force assignee scope.
     if (isFieldRole(user.role)) {
       const { fieldVisitAssigneeWhere } = await import("@/lib/field/access");
-      const { serializeVisit, visitInclude } = await import("@/lib/visits/queries");
+      const { serializeVisits, visitInclude } = await import("@/lib/visits/queries");
       const assigneeWhere = await fieldVisitAssigneeWhere(user.companyId, user.id);
       const visits = await prisma.visit.findMany({
         where: {
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
         include: visitInclude,
         orderBy: { startAt: "asc" },
       });
-      return NextResponse.json(visits.map(serializeVisit));
+      return NextResponse.json(await serializeVisits(visits));
     }
 
     const jobs = await listScheduleJobs(user.companyId, start, end, parseFilters(searchParams));

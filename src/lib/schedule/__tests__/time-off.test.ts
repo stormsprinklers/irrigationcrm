@@ -16,7 +16,7 @@ test("keeps approved time off as a blocking assignment error", () => {
   );
 });
 
-test("blocks an overlapping visit", () => {
+test("warns but allows an overlapping visit", () => {
   assert.deepEqual(
     classifyAssignmentAvailability({
       employeeName: "Alex Morgan",
@@ -24,14 +24,14 @@ test("blocks an overlapping visit", () => {
       conflictingVisitTitle: "Sprinkler repair",
     }),
     {
-      error:
-        'Alex Morgan is already assigned to "Sprinkler repair" during this time. Choose a different time or technician.',
-      warning: null,
+      error: null,
+      warning:
+        'Alex Morgan is already assigned to "Sprinkler repair" during this time. This technician will be double-booked.',
     }
   );
 });
 
-test("prioritizes an overlap error over an off-schedule warning", () => {
+test("combines overlap and off-schedule warnings", () => {
   assert.deepEqual(
     classifyAssignmentAvailability({
       employeeName: "Alex Morgan",
@@ -40,9 +40,9 @@ test("prioritizes an overlap error over an off-schedule warning", () => {
       conflictingVisitTitle: "Sprinkler repair",
     }),
     {
-      error:
-        'Alex Morgan is already assigned to "Sprinkler repair" during this time. Choose a different time or technician.',
-      warning: null,
+      error: null,
+      warning:
+        'Alex Morgan is already assigned to "Sprinkler repair" during this time. This technician will be double-booked. Alex Morgan is normally off at this time.',
     }
   );
 });
