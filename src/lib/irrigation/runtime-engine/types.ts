@@ -10,12 +10,31 @@ export type GrassSeason = "COOL" | "WARM";
 export type EstablishmentStage = "NORMAL" | "NEW_SOD" | "NEW_SEED";
 export type ProgramId = "A" | "B" | "C";
 export type DayOfWeekCode = "SUN" | "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT";
+export type AddressParity = "odd" | "even";
+export type ScheduleMode = "days_of_week" | "odd_calendar_dates" | "even_calendar_dates";
+export type SundayPolicy = "allowed" | "limited" | "prohibited" | "saturday_only";
+
+export type PropertyLocationContext = {
+  address?: string | null;
+  city?: string | null;
+};
 
 export type PropertyScheduleSettings = {
   grassSeason: GrassSeason;
   droughtRestrictionsActive: boolean;
   cycleSoakEnabled: boolean;
   etoOverrideInches?: number | null;
+};
+
+/** City + address parity schedule applied when generating controller programs. */
+export type AddressRestrictionSummary = {
+  city: string;
+  parity: AddressParity;
+  scheduleMode: ScheduleMode;
+  daysOfWeek: DayOfWeekCode[];
+  daysLabel: string;
+  sundayPolicy: SundayPolicy;
+  notes: string[];
 };
 
 export type ZoneRuntimeInput = {
@@ -91,6 +110,7 @@ export type ControllerProgram = {
   label: string;
   daysOfWeek: DayOfWeekCode[];
   daysLabel: string;
+  scheduleMode?: ScheduleMode;
   startTimes: string[];
   zones: ProgramZoneEntry[];
   totalWallClockMinutes: number;
@@ -111,6 +131,7 @@ export type ControllerProgramGuide = {
   programs: ControllerProgram[];
   totalGallonsPerWeek: number;
   notes: string[];
+  addressRestriction?: AddressRestrictionSummary | null;
 };
 
 export type CalculatePropertyRuntimeParams = {
@@ -118,5 +139,6 @@ export type CalculatePropertyRuntimeParams = {
   settings: PropertyScheduleSettings;
   zones: ZoneRuntimeInput[];
   weather: WeatherInput;
+  location?: PropertyLocationContext;
   useManagementEfficiency?: boolean;
 };
