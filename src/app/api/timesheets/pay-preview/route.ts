@@ -4,13 +4,13 @@ import {
   requireSessionUser,
   unauthorizedResponse,
 } from "@/lib/api-auth";
-import { canViewAllTimesheets } from "@/lib/timesheets/permissions";
+import { canViewTimesheetPayPreview } from "@/lib/timesheets/permissions";
 import { listPayPeriodSummaries } from "@/lib/timesheets/queries";
 
 export async function GET() {
   try {
     const user = await requireSessionUser();
-    if (!canViewAllTimesheets(user.role)) {
+    if (!canViewTimesheetPayPreview(user.role)) {
       return forbiddenResponse();
     }
 

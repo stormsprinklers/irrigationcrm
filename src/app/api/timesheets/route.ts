@@ -6,7 +6,11 @@ import {
   requireSessionUser,
   unauthorizedResponse,
 } from "@/lib/api-auth";
-import { canViewAllTimesheets } from "@/lib/timesheets/permissions";
+import {
+  canEditTimesheets,
+  canViewAllTimesheets,
+  canViewTimesheetPayPreview,
+} from "@/lib/timesheets/permissions";
 import { listTimesheetEntries } from "@/lib/timesheets/queries";
 import { prisma } from "@/lib/prisma";
 
@@ -39,7 +43,7 @@ export async function GET(request: NextRequest) {
     let employees: { id: string; name: string }[] | undefined;
     if (canViewAllTimesheets(user.role)) {
       employees = await prisma.user.findMany({
-        where: { companyId: user.companyId, status: "ACTIVE" },
+        where: { companyId: user.companyId, status: "ACTIVE", systemKind: null },
         select: { id: true, name: true },
         orderBy: { name: "asc" },
       });
@@ -50,6 +54,8 @@ export async function GET(request: NextRequest) {
       from: from.toISOString(),
       to: to.toISOString(),
       canViewAll: canViewAllTimesheets(user.role),
+      canEdit: canEditTimesheets(user.role),
+      canViewPayPreview: canViewTimesheetPayPreview(user.role),
       employees,
     });
   } catch {

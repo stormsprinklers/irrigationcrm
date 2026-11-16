@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { format, startOfWeek, subWeeks } from "date-fns";
 import Link from "next/link";
+import { Pencil } from "lucide-react";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -17,16 +18,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-
-type TimesheetEntry = {
-  id: string;
-  userId: string;
-  userName: string;
-  clockInAt: string;
-  clockOutAt: string | null;
-  durationHours: number;
-  inProgress: boolean;
-};
+import {
+  TimesheetEditDialog,
+  type TimesheetEntry,
+} from "@/components/timesheets/TimesheetEditDialog";
 
 type PaySummary = {
   userId: string;
@@ -60,8 +55,11 @@ export function TimesheetsPageInner() {
   const [entries, setEntries] = useState<TimesheetEntry[]>([]);
   const [employees, setEmployees] = useState<{ id: string; name: string }[]>([]);
   const [canViewAll, setCanViewAll] = useState(false);
+  const [canEdit, setCanEdit] = useState(false);
+  const [canViewPayPreview, setCanViewPayPreview] = useState(false);
   const [paySummaries, setPaySummaries] = useState<PaySummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingEntry, setEditingEntry] = useState<TimesheetEntry | null>(null);
 
   const loadEntries = useCallback(async () => {
     setLoading(true);
@@ -76,6 +74,8 @@ export function TimesheetsPageInner() {
       }
       setEntries(data.entries ?? []);
       setCanViewAll(Boolean(data.canViewAll));
+      setCanEdit(Boolean(data.canEdit));
+      setCanViewPayPreview(Boolean(data.canViewPayPreview));
       setEmployees(data.employees ?? []);
     } catch {
       toast.error("Failed to load timesheets");
@@ -85,7 +85,7 @@ export function TimesheetsPageInner() {
   }, [from, to, userId]);
 
   const loadPayPreview = useCallback(async () => {
-    if (!canViewAll) return;
+    if (!canViewPayPreview) return;
     try {
       const res = await fetch("/api/timesheets/pay-preview");
       const data = await res.json();
@@ -95,15 +95,15 @@ export function TimesheetsPageInner() {
     } catch {
       /* optional section */
     }
-  }, [canViewAll]);
+  }, [canViewPayPreview]);
 
   useEffect(() => {
     loadEntries();
   }, [loadEntries]);
 
   useEffect(() => {
-    if (canViewAll) loadPayPreview();
-  }, [canViewAll, loadPayPreview]);
+    if (canViewPayPreview) loadPayPreview();
+  }, [canViewPayPreview, loadPayPreview]);
 
   function setLastWeek() {
     const start = subWeeks(startOfWeek(new Date(), { weekStartsOn: 0 }), 1);
@@ -116,7 +116,7 @@ export function TimesheetsPageInner() {
       <PageHeader
         breadcrumb={["Timesheets"]}
         title="Timesheets"
-        subtitle="Shift clock in/out records for payroll"
+        subtitle="Review employee clock in/out records and correct timesheets"
       />
 
       <div className="mb-6 flex flex-wrap items-end gap-3">
@@ -167,6 +167,7 @@ export function TimesheetsPageInner() {
                 <TableHead>Clock in</TableHead>
                 <TableHead>Clock out</TableHead>
                 <TableHead>Duration</TableHead>
+                {canEdit ? <TableHead className="text-right">Actions</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -185,6 +186,19 @@ export function TimesheetsPageInner() {
                     )}
                   </TableCell>
                   <TableCell>{entry.durationHours.toFixed(2)}h</TableCell>
+                  {canEdit ? (
+                    <TableCell className="text-right">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setEditingEntry(entry)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        Adjust
+                      </Button>
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               ))}
             </TableBody>
@@ -192,7 +206,7 @@ export function TimesheetsPageInner() {
         </div>
       )}
 
-      {canViewAll && paySummaries.length > 0 ? (
+      {canViewPayPreview && paySummaries.length > 0 ? (
         <section className="mt-10">
           <h2 className="mb-3 text-lg font-semibold">Current pay period preview</h2>
           <p className="mb-4 text-sm text-muted-foreground">
@@ -241,6 +255,15 @@ export function TimesheetsPageInner() {
           </div>
         </section>
       ) : null}
+      <TimesheetEditDialog
+        entry={editingEntry}
+        onClose={() => setEditingEntry(null)}
+        onSaved={() => {
+          setEditingEntry(null);
+          void loadEntries();
+          if (canViewPayPreview) void loadPayPreview();
+        }}
+      />
     </ContentArea>
   );
 }
