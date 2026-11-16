@@ -350,79 +350,95 @@ export async function processDuePipelineFollowUps(limit = 75) {
           select: { id: true, name: true },
         })
       : null;
-    const customers = await prisma.customer.findMany({
-      where: {
-        companyId: company.id,
-        pipelineStage: { in: [SalesPipelineStage.LEAD, SalesPipelineStage.QUALIFIED] },
-        pipelineRemovedAt: null,
-        pipelineDeclinedAt: null,
-        pipelineFollowUpsPausedAt: null,
-        doNotService: false,
-        givingProgramOnly: false,
-      },
-      select: {
-        id: true,
-        pipelineLeadId: true,
-        pipelineStage: true,
-        pipelineLeadAt: true,
-        pipelineQualifiedAt: true,
-        pipelineFollowUpsResumedAt: true,
-        phone: true,
-        email: true,
-        marketingSmsOptOut: true,
-        marketingEmailOptOut: true,
-        pipelineFollowUps: {
-          where: { status: { in: [PipelineFollowUpStatus.COMPLETED, PipelineFollowUpStatus.SKIPPED] } },
-          select: { sequence: true, stage: true },
+    // The delivery limit must not also be the scan limit. Once a company had more
+    // than `limit` active pipeline customers, an un-ordered `take: limit` query
+    // repeatedly inspected the same cohort and newer customers never became
+    // eligible. Page through every active customer while still capping actual
+    // delivery attempts to `limit` across the run.
+    const scanPageSize = Math.min(250, Math.max(100, limit));
+    let cursor: string | undefined;
+    while (sent + failed < limit) {
+      const customers = await prisma.customer.findMany({
+        where: {
+          companyId: company.id,
+          pipelineStage: { in: [SalesPipelineStage.LEAD, SalesPipelineStage.QUALIFIED] },
+          pipelineRemovedAt: null,
+          pipelineDeclinedAt: null,
+          pipelineFollowUpsPausedAt: null,
+          doNotService: false,
+          givingProgramOnly: false,
         },
-      },
-      take: limit,
-    });
-    for (const customer of customers) {
-      if (sent + failed >= limit) break;
-      const stage = customer.pipelineStage as ActiveStage;
-      const enteredAt = stageEntryAt(customer, stage);
-      if (!enteredAt) continue;
-      const automationAnchor = pipelineFollowUpAnchorAt(
-        enteredAt,
-        customer.pipelineFollowUpsResumedAt
-      );
-      const completed = new Set(customer.pipelineFollowUps.filter((item) => item.stage === stage).map((item) => item.sequence));
-      for (let index = 0; index < 3; index += 1) {
-        const sequence = index + 1;
-        if (completed.has(sequence)) continue;
-        const template = settings[stageKey(stage)][index];
-        if (automationAnchor.getTime() + template.delayHours * 3600000 > now) continue;
-        const canSms = Boolean(customer.phone && !customer.marketingSmsOptOut);
-        const canEmail = Boolean(customer.email && !customer.marketingEmailOptOut);
-        if (!canSms && !canEmail) break;
-        const method: RequestedMethod = canSms && canEmail ? "SMS_EMAIL" : canSms ? "SMS" : "EMAIL";
-        const assignedLead = customer.pipelineLeadId
-          ? await prisma.lead.findFirst({
-              where: { id: customer.pipelineLeadId, companyId: company.id },
-              select: { assignedUser: { select: { id: true, name: true } } },
-            })
-          : null;
-        const employee =
-          configuredSender ?? assignedLead?.assignedUser ?? company.defaultLeadAssignee;
-        try {
-          await sendPipelineFollowUp({
-            companyId: company.id,
-            customerId: customer.id,
-            stage,
-            sequence,
-            method,
-            automated: true,
-            employeeId: employee?.id,
-            employeeName: employee?.name ?? company.name,
-          });
-          sent += 1;
-        } catch (error) {
-          failed += 1;
-          console.error("Pipeline follow-up failed", { customerId: customer.id, stage, sequence, error });
+        select: {
+          id: true,
+          pipelineLeadId: true,
+          pipelineStage: true,
+          pipelineLeadAt: true,
+          pipelineQualifiedAt: true,
+          pipelineFollowUpsResumedAt: true,
+          phone: true,
+          email: true,
+          marketingSmsOptOut: true,
+          marketingEmailOptOut: true,
+          pipelineFollowUps: {
+            where: { status: { in: [PipelineFollowUpStatus.COMPLETED, PipelineFollowUpStatus.SKIPPED] } },
+            select: { sequence: true, stage: true },
+          },
+        },
+        orderBy: { id: "asc" },
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        take: scanPageSize,
+      });
+      if (!customers.length) break;
+      cursor = customers[customers.length - 1].id;
+
+      for (const customer of customers) {
+        if (sent + failed >= limit) break;
+        const stage = customer.pipelineStage as ActiveStage;
+        const enteredAt = stageEntryAt(customer, stage);
+        if (!enteredAt) continue;
+        const automationAnchor = pipelineFollowUpAnchorAt(
+          enteredAt,
+          customer.pipelineFollowUpsResumedAt
+        );
+        const completed = new Set(customer.pipelineFollowUps.filter((item) => item.stage === stage).map((item) => item.sequence));
+        for (let index = 0; index < 3; index += 1) {
+          const sequence = index + 1;
+          if (completed.has(sequence)) continue;
+          const template = settings[stageKey(stage)][index];
+          if (automationAnchor.getTime() + template.delayHours * 3600000 > now) continue;
+          const canSms = Boolean(customer.phone && !customer.marketingSmsOptOut);
+          const canEmail = Boolean(customer.email && !customer.marketingEmailOptOut);
+          if (!canSms && !canEmail) break;
+          const method: RequestedMethod = canSms && canEmail ? "SMS_EMAIL" : canSms ? "SMS" : "EMAIL";
+          const assignedLead = customer.pipelineLeadId
+            ? await prisma.lead.findFirst({
+                where: { id: customer.pipelineLeadId, companyId: company.id },
+                select: { assignedUser: { select: { id: true, name: true } } },
+              })
+            : null;
+          const employee =
+            configuredSender ?? assignedLead?.assignedUser ?? company.defaultLeadAssignee;
+          try {
+            await sendPipelineFollowUp({
+              companyId: company.id,
+              customerId: customer.id,
+              stage,
+              sequence,
+              method,
+              automated: true,
+              employeeId: employee?.id,
+              employeeName: employee?.name ?? company.name,
+            });
+            sent += 1;
+          } catch (error) {
+            failed += 1;
+            console.error("Pipeline follow-up failed", { customerId: customer.id, stage, sequence, error });
+          }
+          break;
         }
-        break;
       }
+
+      if (customers.length < scanPageSize) break;
     }
   }
   return { sent, failed };

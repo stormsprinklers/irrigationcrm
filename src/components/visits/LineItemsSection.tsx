@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ItemPicker } from "@/components/price-book/ItemPicker";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,20 @@ type Props = {
   onUpdated: () => Promise<void>;
 };
 
+type LineItemDraft = {
+  name: string;
+  description: string;
+  quantity: string;
+  unitPrice: string;
+};
+
+const EMPTY_LINE_ITEM: LineItemDraft = {
+  name: "",
+  description: "",
+  quantity: "1",
+  unitPrice: "0",
+};
+
 function formatCurrency(value: string | number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
     Number(value)
@@ -49,6 +63,7 @@ function formatDiscount(discount: Discount) {
 export function LineItemsSection({ visitId, lineItems, discounts, onUpdated }: Props) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editor, setEditor] = useState<{ lineItemId: string | null; draft: LineItemDraft } | null>(null);
   const [discountLabel, setDiscountLabel] = useState("");
   const [discountAmount, setDiscountAmount] = useState("");
   const [discountType, setDiscountType] = useState<"PERCENT" | "FIXED">("FIXED");
@@ -73,6 +88,69 @@ export function LineItemsSection({ visitId, lineItems, discounts, onUpdated }: P
         toast.error("Failed to add line item");
         return;
       }
+      await onUpdated();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openCustomItem() {
+    setEditor({ lineItemId: null, draft: { ...EMPTY_LINE_ITEM } });
+  }
+
+  function openItemEditor(item: LineItem) {
+    setEditor({
+      lineItemId: item.id,
+      draft: {
+        name: item.name,
+        description: item.description ?? "",
+        quantity: String(item.quantity),
+        unitPrice: String(item.unitPrice),
+      },
+    });
+  }
+
+  async function saveEditor(event: React.FormEvent) {
+    event.preventDefault();
+    if (!editor) return;
+
+    const name = editor.draft.name.trim();
+    const quantity = Number(editor.draft.quantity);
+    const unitPrice = Number(editor.draft.unitPrice);
+    if (!name) {
+      toast.error("Item name is required");
+      return;
+    }
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      toast.error("Quantity must be greater than zero");
+      return;
+    }
+    if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+      toast.error("Unit price cannot be negative");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const editing = Boolean(editor.lineItemId);
+      const res = await fetch(`/api/visits/${visitId}/line-items`, {
+        method: editing ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(editor.lineItemId ? { lineItemId: editor.lineItemId } : {}),
+          name,
+          description: editor.draft.description.trim() || null,
+          quantity,
+          unitPrice,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(body.error ?? `Failed to ${editing ? "update" : "add"} line item`);
+        return;
+      }
+      setEditor(null);
+      toast.success(editing ? "Line item updated" : "Custom line item added");
       await onUpdated();
     } finally {
       setSaving(false);
@@ -180,6 +258,15 @@ export function LineItemsSection({ visitId, lineItems, discounts, onUpdated }: P
         />
         <div className="flex items-center justify-end gap-2">
           <span className="text-sm font-medium">{formatCurrency(item.total)}</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label={`Edit ${item.name}`}
+            onClick={() => openItemEditor(item)}
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
           <Button variant="ghost" size="icon" onClick={() => removeItem(item.id)}>
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -193,10 +280,15 @@ export function LineItemsSection({ visitId, lineItems, discounts, onUpdated }: P
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
           <CardTitle className="text-base">Line items</CardTitle>
-          <Button variant="outline" size="sm" onClick={() => setPickerOpen(true)} disabled={saving}>
-            <Plus className="h-4 w-4" />
-            Add item
-          </Button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setPickerOpen(true)} disabled={saving}>
+              Price book
+            </Button>
+            <Button type="button" size="sm" onClick={openCustomItem} disabled={saving}>
+              <Plus className="h-4 w-4" />
+              Custom item
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           {lineItems.length === 0 ? (
@@ -304,6 +396,97 @@ export function LineItemsSection({ visitId, lineItems, discounts, onUpdated }: P
         onClose={() => setPickerOpen(false)}
         onSelect={addFromPriceBook}
       />
+
+      {editor ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            aria-label="Close line item editor"
+            onClick={() => setEditor(null)}
+            disabled={saving}
+          />
+          <form
+            onSubmit={(event) => void saveEditor(event)}
+            className="relative z-10 w-full max-w-lg rounded-lg border bg-background p-5 shadow-lg"
+          >
+            <h2 className="text-lg font-semibold">
+              {editor.lineItemId ? "Edit line item" : "Add custom line item"}
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Changes apply to this visit only and do not modify the price book.
+            </p>
+            <div className="mt-4 space-y-3">
+              <label className="block text-sm font-medium">
+                Item name
+                <Input
+                  className="mt-1"
+                  autoFocus
+                  value={editor.draft.name}
+                  onChange={(event) => setEditor({
+                    ...editor,
+                    draft: { ...editor.draft, name: event.target.value },
+                  })}
+                  placeholder="Service or material"
+                  required
+                />
+              </label>
+              <label className="block text-sm font-medium">
+                Description (optional)
+                <textarea
+                  className="mt-1 min-h-24 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  value={editor.draft.description}
+                  onChange={(event) => setEditor({
+                    ...editor,
+                    draft: { ...editor.draft, description: event.target.value },
+                  })}
+                  placeholder="Details shown on the visit and invoice"
+                />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block text-sm font-medium">
+                  Quantity
+                  <Input
+                    className="mt-1"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={editor.draft.quantity}
+                    onChange={(event) => setEditor({
+                      ...editor,
+                      draft: { ...editor.draft, quantity: event.target.value },
+                    })}
+                    required
+                  />
+                </label>
+                <label className="block text-sm font-medium">
+                  Unit price
+                  <Input
+                    className="mt-1"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={editor.draft.unitPrice}
+                    onChange={(event) => setEditor({
+                      ...editor,
+                      draft: { ...editor.draft, unitPrice: event.target.value },
+                    })}
+                    required
+                  />
+                </label>
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setEditor(null)} disabled={saving}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={saving}>
+                {saving ? "Saving..." : editor.lineItemId ? "Save changes" : "Add item"}
+              </Button>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </>
   );
 }
