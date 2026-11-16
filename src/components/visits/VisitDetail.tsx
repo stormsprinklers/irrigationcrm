@@ -9,7 +9,6 @@ import { useSession } from "next-auth/react";
 import { isFieldRole, canViewProfitMargins } from "@/lib/employees";
 import { ArrowLeft, Ban, CheckCircle2, CreditCard, RotateCcw, Trash2, Wrench } from "lucide-react";
 import { toast } from "sonner";
-import { CollectPaymentButton } from "@/components/payments/CollectPaymentButton";
 import { VisitBillingDialog } from "@/components/invoices/VisitBillingDialog";
 import { CustomerVisitPanel } from "@/components/visits/CustomerVisitPanel";
 import { LineItemsSection } from "@/components/visits/LineItemsSection";
@@ -39,7 +38,7 @@ import {
   useIrrigationFeatures,
 } from "@/components/layout/CompanyBrandProvider";
 import type { VisitEtaDisplay } from "@/components/visits/TimeTrackingBar";
-import { canAccessInvoices } from "@/lib/invoices/permissions";
+import { canTakeVisitPayments } from "@/lib/invoices/permissions";
 import { canEditVisitHolidayLightingSpecs } from "@/lib/holiday-lighting/spec-permissions";
 import { formatInTimezone } from "@/lib/datetime/zoned";
 
@@ -214,7 +213,7 @@ export function VisitDetail({ visitId }: Props) {
   const { enabled: irrigationEnabled } = useIrrigationFeatures();
   const { enabled: maintenanceEnabled } = useMaintenancePlansFeatures();
   const canDelete = !isFieldRole(session?.user?.role ?? "");
-  const canChooseBillingAmount = canAccessInvoices(session?.user?.role ?? "");
+  const canTakePayment = canTakeVisitPayments(session?.user?.role ?? "");
   const canEditSchedule = !isFieldRole(session?.user?.role ?? "");
   const showProfit = canViewProfitMargins(session?.user?.role ?? "");
   const showJobCosts = ["ADMIN", "MANAGER", "TECH", "INSTALLER"].includes(session?.user?.role ?? "");
@@ -494,7 +493,7 @@ export function VisitDetail({ visitId }: Props) {
               Cancel visit
             </Button>
           ) : null}
-          {canChooseBillingAmount ? (
+          {canTakePayment ? (
             <Button
               type="button"
               disabled={paymentSummary.isPaid || total <= 0}
@@ -503,16 +502,7 @@ export function VisitDetail({ visitId }: Props) {
               <CreditCard className="h-4 w-4" />
               {paymentSummary.isPaid ? "Paid" : "Pay now"}
             </Button>
-          ) : (
-            <CollectPaymentButton
-              visitId={visit.id}
-              total={paymentSummary.balanceDue ?? total}
-              disabled={paymentSummary.isPaid || total <= 0}
-              paid={paymentSummary.isPaid}
-              allowInvoice
-              onInvoiceSent={load}
-            />
-          )}
+          ) : null}
           {canDelete ? (
             <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
               <Trash2 className="h-4 w-4" />

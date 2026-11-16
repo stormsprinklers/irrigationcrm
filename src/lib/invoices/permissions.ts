@@ -5,6 +5,11 @@ export function canAccessInvoices(role: UserRole | string) {
   return role === "ADMIN" || role === "MANAGER" || role === "CSR";
 }
 
+/** Collect or record payment for a specific assigned visit. */
+export function canTakeVisitPayments(role: UserRole | string) {
+  return canAccessInvoices(role) || role === "TECH" || role === "INSTALLER";
+}
+
 export function canIssueRefunds(role: UserRole | string) {
   return role === "ADMIN" || role === "CSR";
 }

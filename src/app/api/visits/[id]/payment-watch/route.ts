@@ -5,6 +5,7 @@ import { getStripeClient } from "@/lib/stripe/client";
 import { prisma } from "@/lib/prisma";
 import { computeTotals, sumDiscounts, sumLineItems, toNumber } from "@/lib/visits/totals";
 import { attachEstimateInvoicesForVisit } from "@/lib/estimates/attach-invoices-to-visit";
+import { visitPaymentAccessResponse } from "@/lib/invoices/visit-payment-access";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -19,6 +20,8 @@ export async function GET(_request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
     const { id: visitId } = await params;
+    const denied = await visitPaymentAccessResponse(user, visitId);
+    if (denied) return denied;
     await attachEstimateInvoicesForVisit({ companyId: user.companyId, visitId });
 
     const visit = await prisma.visit.findFirst({

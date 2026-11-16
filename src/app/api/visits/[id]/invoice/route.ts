@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
+import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { deliverInvoice } from "@/lib/invoices/deliver";
-import { canAccessInvoices } from "@/lib/invoices/permissions";
+import { visitPaymentAccessResponse } from "@/lib/invoices/visit-payment-access";
 import {
   getVisitInvoiceAvailability,
   syncVisitInvoice,
@@ -13,8 +13,9 @@ type Params = { params: Promise<{ id: string }> };
 export async function GET(_request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    if (!canAccessInvoices(user.role)) return forbiddenResponse();
     const { id: visitId } = await params;
+    const denied = await visitPaymentAccessResponse(user, visitId);
+    if (denied) return denied;
     const result = await getVisitInvoiceAvailability({ companyId: user.companyId, visitId });
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: result.status });
@@ -29,6 +30,8 @@ export async function POST(request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
     const { id: visitId } = await params;
+    const denied = await visitPaymentAccessResponse(user, visitId);
+    if (denied) return denied;
     const body = (await request.json().catch(() => ({}))) as {
       send?: boolean;
       channel?: unknown;

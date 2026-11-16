@@ -4,6 +4,7 @@ import { syncVisitInvoice } from "@/lib/invoices/sync-visit-invoice";
 import { createInvoiceCheckoutSession } from "@/lib/stripe/invoice-checkout";
 import { prisma } from "@/lib/prisma";
 import type { EstimateInvoiceAmountSelection } from "@/lib/invoices/estimate-invoice-amount";
+import { visitPaymentAccessResponse } from "@/lib/invoices/visit-payment-access";
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,6 +12,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const visitId = body.visitId as string | undefined;
     if (!visitId) return badRequestResponse("visitId is required");
+    const denied = await visitPaymentAccessResponse(user, visitId);
+    if (denied) return denied;
 
     if (!process.env.STRIPE_SECRET_KEY) {
       return NextResponse.json({ error: "STRIPE_SECRET_KEY is not configured" }, { status: 503 });

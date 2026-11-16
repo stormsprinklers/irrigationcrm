@@ -192,22 +192,8 @@ export async function recordInvoicePayment(
     });
   }
 
-  if (invoice.visitId && nextStatus === "PAID") {
-    const visit = await prisma.visit.findFirst({
-      where: { id: invoice.visitId, companyId: invoice.companyId },
-      select: { status: true },
-    });
-    if (visit && visit.status !== "CANCELLED" && visit.status !== "COMPLETED") {
-      const { assertVisitCanComplete } = await import("@/lib/checklists/apply");
-      const checklistError = await assertVisitCanComplete(invoice.visitId!, invoice.companyId);
-      if (!checklistError) {
-        await prisma.visit.update({
-          where: { id: invoice.visitId! },
-          data: { status: "COMPLETED" },
-        });
-      }
-    }
-  }
+  // Payment and work progress are separate lifecycles. A paid invoice must not
+  // complete its visit; only an explicit Finish visit action may do that.
 
   if (invoice.estimateId && nextStatus === "PAID") {
     const { finalizeEstimateBooking } = await import("@/lib/estimates/booking");

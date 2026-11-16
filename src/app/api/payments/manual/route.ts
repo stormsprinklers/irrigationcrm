@@ -4,6 +4,7 @@ import { recordInvoicePayment } from "@/lib/invoices/record-payment";
 import { syncVisitInvoice } from "@/lib/invoices/sync-visit-invoice";
 import { prisma } from "@/lib/prisma";
 import type { EstimateInvoiceAmountSelection } from "@/lib/invoices/estimate-invoice-amount";
+import { visitPaymentAccessResponse } from "@/lib/invoices/visit-payment-access";
 
 const MANUAL_METHODS = new Set(["CASH", "CHECK"]);
 
@@ -19,6 +20,8 @@ export async function POST(request: NextRequest) {
       null;
 
     if (!visitId) return badRequestResponse("visitId is required");
+    const denied = await visitPaymentAccessResponse(user, visitId);
+    if (denied) return denied;
     if (!MANUAL_METHODS.has(method)) {
       return badRequestResponse("method must be CASH or CHECK");
     }

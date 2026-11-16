@@ -2,14 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import {
   badRequestResponse,
-  forbiddenResponse,
   requireSessionUser,
   unauthorizedResponse,
 } from "@/lib/api-auth";
 import { listCustomerCardsOnFile } from "@/lib/customers/stripe";
 import type { EstimateInvoiceAmountSelection } from "@/lib/invoices/estimate-invoice-amount";
-import { canAccessInvoices } from "@/lib/invoices/permissions";
 import { recordInvoicePayment } from "@/lib/invoices/record-payment";
+import { visitPaymentAccessResponse } from "@/lib/invoices/visit-payment-access";
 import { syncVisitInvoice } from "@/lib/invoices/sync-visit-invoice";
 import { prisma } from "@/lib/prisma";
 import {
@@ -44,9 +43,10 @@ async function visitCustomer(visitId: string, companyId: string) {
 export async function GET(request: NextRequest) {
   try {
     const user = await requireSessionUser(request);
-    if (!canAccessInvoices(user.role)) return forbiddenResponse();
     const visitId = request.nextUrl.searchParams.get("visitId")?.trim();
     if (!visitId) return badRequestResponse("visitId is required");
+    const denied = await visitPaymentAccessResponse(user, visitId);
+    if (denied) return denied;
 
     const visit = await visitCustomer(visitId, user.companyId);
     if (!visit?.customerId || !visit.customer) {
@@ -65,7 +65,6 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const user = await requireSessionUser(request);
-    if (!canAccessInvoices(user.role)) return forbiddenResponse();
     if (!process.env.STRIPE_SECRET_KEY) {
       return NextResponse.json({ error: "Stripe is not configured" }, { status: 503 });
     }
@@ -73,6 +72,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const visitId = typeof body.visitId === "string" ? body.visitId.trim() : "";
     if (!visitId) return badRequestResponse("visitId is required");
+    const denied = await visitPaymentAccessResponse(user, visitId);
+    if (denied) return denied;
 
     const visit = await visitCustomer(visitId, user.companyId);
     if (!visit?.customerId || !visit.customer) {
