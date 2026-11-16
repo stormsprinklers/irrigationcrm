@@ -48,14 +48,26 @@ export async function listCustomerCardsOnFile(params: {
   }
 
   const stripe = getStripeClient();
-  const methods = await stripe.paymentMethods.list({
-    customer: customer.stripeCustomerId,
-    type: "card",
+  const [methods, stripeCustomer] = await Promise.all([
+    stripe.paymentMethods.list({
+      customer: customer.stripeCustomerId,
+      type: "card",
+    }),
+    stripe.customers.retrieve(customer.stripeCustomerId),
+  ]);
+  const defaultPaymentMethod =
+    !stripeCustomer.deleted && typeof stripeCustomer.invoice_settings.default_payment_method === "string"
+      ? stripeCustomer.invoice_settings.default_payment_method
+      : null;
+  const orderedMethods = [...methods.data].sort((left, right) => {
+    if (left.id === defaultPaymentMethod) return -1;
+    if (right.id === defaultPaymentMethod) return 1;
+    return 0;
   });
 
   return {
     stripeCustomerId: customer.stripeCustomerId,
-    cards: methods.data.map((pm) => ({
+    cards: orderedMethods.map((pm) => ({
       id: pm.id,
       brand: pm.card?.brand ?? null,
       last4: pm.card?.last4 ?? null,

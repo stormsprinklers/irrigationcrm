@@ -7,11 +7,12 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
 type Props = {
-  onSaved: () => void;
+  onSaved: (paymentMethodId: string) => void | Promise<void>;
   onCancel: () => void;
+  submitLabel?: string;
 };
 
-export function CardSetupForm({ onSaved, onCancel }: Props) {
+export function CardSetupForm({ onSaved, onCancel, submitLabel = "Save card" }: Props) {
   const stripe = useStripe();
   const elements = useElements();
   const [saving, setSaving] = useState(false);
@@ -30,8 +31,13 @@ export function CardSetupForm({ onSaved, onCancel }: Props) {
         toast.error(result.error.message ?? "Card setup failed");
         return;
       }
-      toast.success("Card saved on file");
-      onSaved();
+      const paymentMethod = result.setupIntent?.payment_method;
+      const paymentMethodId =
+        typeof paymentMethod === "string" ? paymentMethod : paymentMethod?.id;
+      if (!paymentMethodId) throw new Error("Card was saved, but could not be activated");
+      await onSaved(paymentMethodId);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Card setup failed");
     } finally {
       setSaving(false);
     }
@@ -48,7 +54,7 @@ export function CardSetupForm({ onSaved, onCancel }: Props) {
               Saving...
             </>
           ) : (
-            "Save card"
+            submitLabel
           )}
         </Button>
         <Button type="button" variant="outline" onClick={onCancel} disabled={saving}>
