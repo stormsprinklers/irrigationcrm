@@ -10,6 +10,7 @@ import {
   MISSED_CALL_LOOKBACK_MS,
 } from "@/lib/voice/call-history";
 import { callRecordingPlaybackPath } from "@/lib/voice/recording";
+import { buildCallHistorySearchWhere } from "@/lib/voice/call-history-search";
 
 const callLogInclude = {
   customer: { select: { id: true, name: true, phone: true } },
@@ -219,14 +220,16 @@ async function loadAiReceptionistIndexes(rows: CallLogRow[]) {
 export async function listCallHistory(
   companyId: string,
   take = CALL_HISTORY_UI_LIMIT,
-  options?: { customerIds?: string[] }
+  options?: { customerIds?: string[]; search?: string }
 ): Promise<CallHistoryListItem[]> {
   if (options?.customerIds && options.customerIds.length === 0) return [];
+  const searchWhere = buildCallHistorySearchWhere(options?.search);
   const rows = await prisma.callLog.findMany({
     where: {
       companyId,
       scope: "EXTERNAL",
       ...(options?.customerIds ? { customerId: { in: options.customerIds } } : {}),
+      ...(searchWhere ? { AND: [searchWhere] } : {}),
     },
     include: callLogInclude,
     orderBy: { startedAt: "desc" },

@@ -2,15 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { FileText, History, Play } from "lucide-react";
+import { FileText, History, Loader2, Play, Search, X } from "lucide-react";
 import { CallHistoryIcon } from "@/components/voice/CallHistoryIcon";
 import { CallDetailView } from "@/components/voice/CallDetailView";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { InboxCountOrb } from "@/components/layout/InboxCountOrb";
 import { InboxListDetailShell } from "@/components/inbox/InboxListDetailShell";
 import { notifyInboxBadgesChanged } from "@/contexts/InboxBadgesProvider";
 import { cn } from "@/lib/utils";
+import { formatPhoneDisplay } from "@/lib/inbox/phone";
 import type { CallHistoryDetail, CallHistoryListItem } from "@/lib/voice/call-history";
 import {
   CALL_HISTORY_LIST_MAX_HEIGHT_CLASS,
@@ -19,6 +21,7 @@ import {
   formatCallTime,
   isUnreviewedMissedInboundCall,
   remotePartyLabel,
+  remotePartyNumber,
 } from "@/lib/voice/call-history";
 
 type Props = {
@@ -29,9 +32,13 @@ export function CsrCallHistoryPanel({ className }: Props) {
   const [calls, setCalls] = useState<CallHistoryListItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "missed">("all");
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [detail, setDetail] = useState<CallHistoryDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const openedOnMissedRef = useRef(false);
+  const historyRequestRef = useRef(0);
 
   const [clearing, setClearing] = useState(false);
 
@@ -42,17 +49,31 @@ export function CsrCallHistoryPanel({ className }: Props) {
   const visibleCalls = filter === "missed" ? missedCalls : calls;
 
   useEffect(() => {
-    if (openedOnMissedRef.current || missedCalls.length === 0) return;
+    if (debouncedSearch || openedOnMissedRef.current || missedCalls.length === 0) return;
     openedOnMissedRef.current = true;
     setFilter("missed");
-  }, [missedCalls.length]);
+  }, [debouncedSearch, missedCalls.length]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [search]);
 
   const loadHistory = useCallback(() => {
-    fetch("/api/voice/calls/history")
+    const requestId = ++historyRequestRef.current;
+    const params = new URLSearchParams();
+    if (debouncedSearch) params.set("q", debouncedSearch);
+    setHistoryLoading(true);
+    fetch(`/api/voice/calls/history${params.size ? `?${params.toString()}` : ""}`)
       .then((r) => r.json())
-      .then((data) => setCalls(data.calls ?? []))
-      .catch(() => {});
-  }, []);
+      .then((data) => {
+        if (requestId === historyRequestRef.current) setCalls(data.calls ?? []);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (requestId === historyRequestRef.current) setHistoryLoading(false);
+      });
+  }, [debouncedSearch]);
 
   async function markCallReviewed(id: string) {
     const call = calls.find((c) => c.id === id);
@@ -110,6 +131,41 @@ export function CsrCallHistoryPanel({ className }: Props) {
 
   const filterChrome = (
     <div className="flex flex-col gap-2">
+      <div className="relative">
+        <Search
+          className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden
+        />
+        <Input
+          type="search"
+          value={search}
+          onChange={(event) => {
+            setSearch(event.target.value);
+            setFilter("all");
+          }}
+          placeholder="Search customer, phone, or employee"
+          aria-label="Search call history"
+          className="h-9 pl-8 pr-16"
+        />
+        <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
+          {historyLoading ? (
+            <Loader2
+              className="h-3.5 w-3.5 animate-spin text-muted-foreground"
+              aria-label="Searching"
+            />
+          ) : null}
+          {search ? (
+            <button
+              type="button"
+              className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label="Clear call search"
+              onClick={() => setSearch("")}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
+        </div>
+      </div>
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -163,9 +219,11 @@ export function CsrCallHistoryPanel({ className }: Props) {
     >
       {!visibleCalls.length ? (
         <p className="p-4 text-sm text-muted-foreground">
-          {filter === "missed"
-            ? "No unreviewed missed inbound calls in the last 48 hours."
-            : "No calls yet."}
+          {debouncedSearch
+            ? `No calls found for “${debouncedSearch}”.`
+            : filter === "missed"
+              ? "No unreviewed missed inbound calls in the last 48 hours."
+              : "No calls yet."}
         </p>
       ) : (
         <ul>
@@ -214,7 +272,10 @@ export function CsrCallHistoryPanel({ className }: Props) {
                       <p className="truncate text-sm font-medium">{label}</p>
                     )}
                     <p className="text-xs text-muted-foreground">
-                      {formatCallTime(call.startedAt)}
+                      {formatPhoneDisplay(
+                        remotePartyNumber(call.direction, call.fromNumber, call.toNumber)
+                      )}
+                      {` · ${formatCallTime(call.startedAt)}`}
                       {call.durationSec ? ` · ${formatCallDuration(call.durationSec)}` : ""}
                     </p>
                   </div>
@@ -321,6 +382,11 @@ export function CsrCallHistoryPanel({ className }: Props) {
                 <span className="text-xs text-muted-foreground">
                   ({calls.length}
                   {calls.length >= CALL_HISTORY_UI_LIMIT ? "+" : ""})
+                </span>
+              ) : null}
+              {debouncedSearch ? (
+                <span className="truncate text-xs text-muted-foreground" title={debouncedSearch}>
+                  for “{debouncedSearch}”
                 </span>
               ) : null}
             </div>
