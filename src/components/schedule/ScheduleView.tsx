@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
   addDays,
@@ -77,6 +77,16 @@ const TIME_OFF_LABELS: Record<string, string> = {
   OTHER: "Other",
 };
 
+function scheduleViewFromParam(value: string | null): ScheduleViewMode {
+  return value === "day" || value === "month" || value === "week" ? value : "week";
+}
+
+function scheduleDateFromParam(value: string | null) {
+  if (!value) return new Date();
+  const date = new Date(`${value}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+
 function timeOffAsScheduleJob(
   request: TimeOffRequestDTO,
   options: Pick<FilterOptions, "employees" | "crews">
@@ -131,14 +141,17 @@ export function ScheduleView({
   onSelectSlot?: (slot: ScheduleSlotClick) => void;
 } = {}) {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const { data: session } = useSession();
   const fieldRole = isFieldRole(session?.user?.role ?? "");
   const inboxBadges = useInboxBadges();
   const timeOffPending = fieldRole ? 0 : inboxBadges?.timeOffPending ?? 0;
-  const [viewMode, setViewMode] = useState<ScheduleViewMode>("week");
-  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }));
-  const [monthStart, setMonthStart] = useState(() => startOfMonth(new Date()));
-  const [focusDay, setFocusDay] = useState(() => startOfDay(new Date()));
+  const initialAnchor = scheduleDateFromParam(initialDate ?? searchParams.get("date"));
+  const initialViewMode = initialDate ? "day" : scheduleViewFromParam(searchParams.get("view"));
+  const [viewMode, setViewMode] = useState<ScheduleViewMode>(initialViewMode);
+  const [weekStart, setWeekStart] = useState(() => startOfWeek(initialAnchor, { weekStartsOn: 0 }));
+  const [monthStart, setMonthStart] = useState(() => startOfMonth(initialAnchor));
+  const [focusDay, setFocusDay] = useState(() => startOfDay(initialAnchor));
   const [jobs, setJobs] = useState<ScheduleJobDTO[]>([]);
   const [colorBy, setColorBy] = useState<ColorByMode>("technician");
   const [filters, setFilters] = useState<ScheduleFilters>(DEFAULT_SCHEDULE_FILTERS);
@@ -207,6 +220,22 @@ export function ScheduleView({
     if (viewMode === "month") return startOfMonth(monthStart);
     return weekStart;
   }, [viewMode, focusDay, monthStart, weekStart]);
+
+  const scheduleReturnTo = useMemo(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("view", viewMode);
+    params.set("date", format(rangeStart, "yyyy-MM-dd"));
+    return `/schedule?${params.toString()}`;
+  }, [rangeStart, searchParams, viewMode]);
+
+  useEffect(() => {
+    if (embedded) return;
+    const currentView = searchParams.get("view");
+    const currentDate = searchParams.get("date");
+    const nextDate = format(rangeStart, "yyyy-MM-dd");
+    if (currentView === viewMode && currentDate === nextDate) return;
+    router.replace(scheduleReturnTo, { scroll: false });
+  }, [embedded, rangeStart, router, scheduleReturnTo, searchParams, viewMode]);
 
   const periodLabel = useMemo(() => {
     if (viewMode === "day") return format(focusDay, "EEEE, MMMM d, yyyy");
@@ -445,10 +474,11 @@ export function ScheduleView({
         onToday={goToToday}
         viewMode={viewMode}
         onViewModeChange={(mode) => {
+          const anchor = rangeStart;
           setViewMode(mode);
-          if (mode === "day") setFocusDay(startOfDay(new Date()));
-          if (mode === "month") setMonthStart(startOfMonth(new Date()));
-          if (mode === "week") setWeekStart(startOfWeek(new Date(), { weekStartsOn: 0 }));
+          if (mode === "day") setFocusDay(startOfDay(anchor));
+          if (mode === "month") setMonthStart(startOfMonth(anchor));
+          if (mode === "week") setWeekStart(startOfWeek(anchor, { weekStartsOn: 0 }));
         }}
         onColorByChange={setColorBy}
         canExport={!fieldRole && !embedded}
@@ -550,6 +580,7 @@ export function ScheduleView({
             divisionBookingWindows={filterOptions.openTimeSlots?.windows ?? null}
             workSchedules={filterOptions.openTimeSlots?.workSchedules}
             arrivalWindowHours={filterOptions.arrivalWindowHours}
+            returnTo={scheduleReturnTo}
             onDayClick={(day) => {
               setFocusDay(startOfDay(day));
               setViewMode("day");

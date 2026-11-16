@@ -320,12 +320,12 @@ export function PortalEstimateView({
       return;
     }
     if (deposit === "cancelled") {
-      toast.message("Payment was cancelled. Choose Pay now or Pay later to continue.");
+      toast.message("Payment was cancelled. Choose an option to continue.");
       window.history.replaceState({}, "", window.location.pathname);
       return;
     }
     if (payment === "card-cancelled") {
-      toast.message("Card setup was cancelled. Choose Pay now or Pay later to continue.");
+      toast.message("Card setup was cancelled.");
       window.history.replaceState({}, "", window.location.pathname);
       return;
     }
@@ -346,7 +346,7 @@ export function PortalEstimateView({
         );
         setPaymentReady(true);
         setPaymentConfirmation("card-saved");
-        toast.success("Card saved. You will not be charged until an invoice is due.");
+        toast.success("Card saved on file for future payments. Your estimate is approved.");
         window.history.replaceState({}, "", window.location.pathname);
       })
       .catch((error) => {
@@ -501,7 +501,7 @@ export function PortalEstimateView({
       setEstimate(data.estimate);
       toast.success(
         estimate.holidayRecurringService
-          ? "Signature saved. Save a card to complete your approval."
+          ? "Signature saved. Save a card on file for future payments to complete your approval."
           : "Signature saved. Choose how you would like to handle payment."
       );
     } catch (err) {
@@ -546,7 +546,7 @@ export function PortalEstimateView({
       );
       setPaymentReady(true);
       setPaymentConfirmation("card-saved");
-      toast.success("Your card is already saved. The office can invoice you later.");
+      toast.success("Your card is already on file. The office can invoice you when payment is due.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not start card setup");
     } finally {
@@ -920,11 +920,19 @@ export function PortalEstimateView({
         ) : needsPaymentChoice ? (
           <section className="space-y-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
             <div>
-              <h2 className="font-semibold">Complete your approval</h2>
+              <h2 className="font-semibold">
+                {requiresHolidayCard ? "Save a card on file" : "Complete your approval"}
+              </h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 {requiresHolidayCard
-                  ? "Securely save a card for future yearly billing. Saving a card does not charge it today. Your estimate is not approved until a card is on file."
-                  : `${depositDue > 0 ? "Pay the required deposit" : "Pay the estimate"} now, or securely save a card so the office can invoice you later. Saving a card does not charge it today. Your estimate is not approved until you complete one of these options.`}
+                  ? "Your estimate requires a card on file for future yearly billing."
+                  : `${depositDue > 0 ? "Pay the required deposit" : "Pay the estimate"} now, or save a card on file so the office can invoice you when payment is due. Your estimate is approved after you complete either option.`}
+              </p>
+            </div>
+            <div className="rounded-md border-2 border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-950">
+              <p className="font-semibold">Save card on file</p>
+              <p className="mt-1">
+                This securely stores your card for future authorized payments. Saving a card does not process a payment.
               </p>
             </div>
             <div className={requiresHolidayCard ? "grid gap-2" : "grid gap-2 sm:grid-cols-2"}>
@@ -940,9 +948,7 @@ export function PortalEstimateView({
               >
                 {payLaterLoading
                   ? "Opening secure card form..."
-                  : requiresHolidayCard
-                    ? "Save card and approve"
-                    : "Pay later — save card"}
+                  : "Save card on file"}
               </Button>
             </div>
           </section>
@@ -950,7 +956,7 @@ export function PortalEstimateView({
           (estimate.needsScheduling || paymentReady) &&
           Boolean(estimate.signedAt) ? (
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
-            Payment arrangements are complete. The office will contact you to schedule the work.
+            Your estimate is approved. The office will contact you to schedule the work.
           </div>
         ) : estimate.signedAt ? (
           <p className="text-sm text-muted-foreground">

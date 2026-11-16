@@ -221,13 +221,20 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       actorId: user.id,
       entityType: "Visit",
       entityId: id,
-      action: "update",
+      action:
+        body.status === VisitStatus.CANCELLED && existing.status !== VisitStatus.CANCELLED
+          ? "cancel"
+          : existing.status === VisitStatus.CANCELLED && nextStatus === VisitStatus.UNSCHEDULED
+            ? "reopen"
+            : "update",
       before: {
+        status: existing.status,
         startAt: existing.startAt.toISOString(),
         endAt: existing.endAt.toISOString(),
         workSummary: existing.workSummary,
       },
       after: {
+        status: nextStatus,
         startAt: nextStart.toISOString(),
         endAt: nextEnd.toISOString(),
         workSummary:

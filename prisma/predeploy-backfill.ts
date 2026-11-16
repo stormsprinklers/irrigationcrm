@@ -1063,6 +1063,30 @@ async function ensurePipelineFollowUps() {
   console.log("Ensured pipeline follow-up tables and fields");
 }
 
+async function ensureMessageReadReceipts() {
+  const statements = [
+    `CREATE TABLE IF NOT EXISTS "MessageReadReceipt" (
+      "id" TEXT NOT NULL, "messageId" TEXT NOT NULL, "userId" TEXT NOT NULL,
+      "readAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "MessageReadReceipt_pkey" PRIMARY KEY ("id"))`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "MessageReadReceipt_messageId_userId_key" ON "MessageReadReceipt"("messageId", "userId")`,
+    `CREATE INDEX IF NOT EXISTS "MessageReadReceipt_userId_readAt_idx" ON "MessageReadReceipt"("userId", "readAt")`,
+  ];
+  for (const statement of statements) await prisma.$executeRawUnsafe(statement);
+
+  for (const statement of [
+    `ALTER TABLE "MessageReadReceipt" ADD CONSTRAINT "MessageReadReceipt_messageId_fkey" FOREIGN KEY ("messageId") REFERENCES "Message"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+    `ALTER TABLE "MessageReadReceipt" ADD CONSTRAINT "MessageReadReceipt_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+  ]) {
+    try {
+      await prisma.$executeRawUnsafe(statement);
+    } catch (error) {
+      if (!(error instanceof Error) || !/already exists|duplicate/i.test(error.message)) throw error;
+    }
+  }
+  console.log("Ensured internal SMS read receipt table");
+}
+
 async function main() {
   // This must stay first: generated Prisma model queries include affiliate
   // fields even when the feature itself is not being used.
@@ -1074,6 +1098,7 @@ async function main() {
   await ensureCustomerTrackingData();
   await ensurePipelineConversionDelivery();
   await ensurePipelineFollowUps();
+  await ensureMessageReadReceipts();
   await ensureOwnerAssistantTables();
   await ensureSecurityRateLimitTable();
   await ensureSecurityHardeningTables();

@@ -24,6 +24,12 @@ import {
 } from "@/lib/inbox/sms-delivery";
 import { resolveSmsSendTarget } from "@/lib/inbox/sms-send-target";
 import { parseEstimateSentActivity, parsePipelineEmailActivity } from "@/lib/inbox/internal-activity";
+import {
+  formatSmsReadReceipt,
+  formatSmsReadReceiptDetails,
+  type SmsReadAudienceMember,
+  type SmsReadReceipt,
+} from "@/lib/inbox/read-receipts";
 import type { PendingAttachment } from "@/lib/inbox/attachments";
 import { cn } from "@/lib/utils";
 import { MergeTokenTextField } from "@/components/communications/MergeTokenTextField";
@@ -42,6 +48,7 @@ type Message = {
   media?: MessageMediaItem[];
   contactInfoDetected?: boolean;
   contactInfoAppliedAt?: string | null;
+  readReceipts?: SmsReadReceipt[];
 };
 
 type Conversation = {
@@ -172,6 +179,7 @@ export function SmsMessagePane({
 }) {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [readReceiptAudience, setReadReceiptAudience] = useState<SmsReadAudienceMember[]>([]);
   const [body, setBody] = useState("");
   const [recipient, setRecipient] = useState<SmsRecipient | null>(null);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
@@ -218,12 +226,14 @@ export function SmsMessagePane({
     if (!conversationId) {
       setConversation(null);
       setMessages([]);
+      setReadReceiptAudience([]);
       return;
     }
 
     let cancelled = false;
     setConversation(null);
     setMessages([]);
+    setReadReceiptAudience([]);
 
     async function load() {
       const res = await fetch(`/api/inbox/sms/conversations/${conversationId}/messages`);
@@ -234,6 +244,7 @@ export function SmsMessagePane({
         smsOpenRef.current === false && data.conversation?.smsOpen !== false;
       smsOpenRef.current = data.conversation?.smsOpen;
       setConversation(data.conversation);
+      setReadReceiptAudience(data.readReceiptAudience ?? []);
       setMessages(
         data.messages.map((msg: Message & { contactInfoAppliedAt?: string | Date | null }) => ({
           ...msg,
@@ -574,6 +585,10 @@ export function SmsMessagePane({
                           (thread?.participantPhone
                             ? formatPhoneDisplay(thread.participantPhone)
                           : "Team member");
+                  const readReceiptLabel =
+                    msg.direction === "INBOUND"
+                      ? formatSmsReadReceipt(msg.readReceipts ?? [])
+                      : null;
 
                   if (estimateActivity) {
                     return (
@@ -669,6 +684,18 @@ export function SmsMessagePane({
                           : "Failed to send"}
                         <span className="font-normal no-underline opacity-80">· Why?</span>
                       </button>
+                    ) : null}
+
+                    {readReceiptLabel ? (
+                      <p
+                        className="px-1 text-[10px] text-muted-foreground"
+                        title={formatSmsReadReceiptDetails(
+                          msg.readReceipts ?? [],
+                          readReceiptAudience
+                        )}
+                      >
+                        {readReceiptLabel}
+                      </p>
                     ) : null}
 
                     {scope === "customers" &&

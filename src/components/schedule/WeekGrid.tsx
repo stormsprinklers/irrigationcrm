@@ -109,6 +109,17 @@ function jobAddress(job: ScheduleJobDTO) {
   return [street, [cityLine, zip].filter(Boolean).join(" ")].filter(Boolean).join(" · ") || "No location saved";
 }
 
+function scheduleJobHref(job: ScheduleJobDTO, returnTo: string) {
+  if (job.kind !== "TIME_OFF") {
+    return `/visits/${job.id}?returnTo=${encodeURIComponent(returnTo)}`;
+  }
+
+  const [, query = ""] = returnTo.split("?", 2);
+  const params = new URLSearchParams(query);
+  params.set("panel", "team");
+  return `/schedule?${params.toString()}`;
+}
+
 function JobHoverPreview({ job }: { job: ScheduleJobDTO }) {
   const start = new Date(job.startAt);
   const end = new Date(job.endAt);
@@ -161,6 +172,7 @@ function JobBlock({
   colorBy,
   columnWidth,
   startHour,
+  returnTo,
   onTimeChange,
 }: {
   job: ScheduleJobDTO;
@@ -169,6 +181,7 @@ function JobBlock({
   colorBy: ColorByMode;
   columnWidth: number;
   startHour: number;
+  returnTo: string;
   onTimeChange?: (jobId: string, startAt: Date, endAt: Date) => void;
 }) {
   const [resizeDraft, setResizeDraft] = useState<{ startAt: Date; endAt: Date } | null>(null);
@@ -265,7 +278,7 @@ function JobBlock({
     <Tooltip>
       <TooltipTrigger asChild>
         <Link
-          href={job.kind === "TIME_OFF" ? "/schedule?panel=team" : `/visits/${job.id}`}
+          href={scheduleJobHref(job, returnTo)}
           onClick={(event) => {
             if (resizedRef.current || resizeState.current) event.preventDefault();
           }}
@@ -304,38 +317,45 @@ function JobBlock({
         </>
       ) : null}
           <div className="flex h-full flex-col p-1 text-[9px]">
-        <div className="flex items-center gap-0.5">
-          {job.kind === "TIME_OFF" ? (
-            <CalendarOff className="h-2.5 w-2.5 shrink-0 opacity-80" />
-          ) : (
-            <Wrench className="h-2.5 w-2.5 shrink-0 opacity-80" />
-          )}
-          {(job.assignedUsers?.length ? job.assignedUsers : job.assignedUser ? [job.assignedUser] : [])
-            .slice(0, 3)
-            .map((employee, index) => (
-              <Avatar key={employee.id} className={cn("h-3.5 w-3.5 shrink-0", index > 0 && "-ml-1")}>
-                {employee.photoUrl ? (
-                  <AvatarImage src={blobProxyUrl(employee.photoUrl)} alt={employee.name} />
-                ) : null}
-                <AvatarFallback
-                  className="text-[6px]"
-                  style={{ backgroundColor: employee.color ?? "#64748B", color: "#fff" }}
-                >
-                  {getInitials(employee.name)}
-                </AvatarFallback>
-              </Avatar>
-            ))}
-        </div>
-        {height >= 40 ? (
-          <p className="mt-0.5 truncate font-medium leading-tight">
-            {job.kind === "TIME_OFF" ? job.title : format(start, "h:mm")}
-          </p>
-        ) : null}
-        {height >= 56 ? (
-          <p className="mt-0.5 truncate text-[8px] text-muted-foreground">
-            {job.kind === "TIME_OFF" ? `${format(start, "h:mm a")}–${format(end, "h:mm a")}` : jobLocation(job)}
-          </p>
-        ) : null}
+            <div className="flex min-w-0 items-center gap-1">
+              {job.kind === "TIME_OFF" ? (
+                <CalendarOff className="h-2.5 w-2.5 shrink-0 opacity-80" />
+              ) : (
+                <Wrench className="h-2.5 w-2.5 shrink-0 opacity-80" />
+              )}
+              <p className="min-w-0 flex-1 truncate font-semibold leading-tight">
+                {job.kind === "TIME_OFF" ? job.title : job.customer?.name ?? job.title}
+              </p>
+              {(job.assignedUsers?.length
+                ? job.assignedUsers
+                : job.assignedUser
+                  ? [job.assignedUser]
+                  : [])
+                .slice(0, 1)
+                .map((employee) => (
+                  <Avatar key={employee.id} className="h-3.5 w-3.5 shrink-0">
+                    {employee.photoUrl ? (
+                      <AvatarImage src={blobProxyUrl(employee.photoUrl)} alt={employee.name} />
+                    ) : null}
+                    <AvatarFallback
+                      className="text-[6px]"
+                      style={{ backgroundColor: employee.color ?? "#64748B", color: "#fff" }}
+                    >
+                      {getInitials(employee.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                ))}
+            </div>
+            {job.kind !== "TIME_OFF" && height >= 36 ? (
+              <p className="mt-0.5 truncate text-[8px] leading-tight text-muted-foreground">
+                {jobAddress(job)}
+              </p>
+            ) : null}
+            {height >= 50 ? (
+              <p className="mt-0.5 truncate text-[8px] leading-tight text-muted-foreground">
+                {format(start, "h:mm a")}–{format(end, "h:mm a")}
+              </p>
+            ) : null}
           </div>
         </Link>
       </TooltipTrigger>
@@ -358,6 +378,7 @@ type TimeGridProps = {
   divisionBookingWindows?: DivisionBookingWindows | null;
   workSchedules?: Record<string, WorkScheduleDayDTO[]>;
   arrivalWindowHours?: number;
+  returnTo: string;
   onSlotClick?: (slot: ScheduleSlotClick) => void;
   onJobTimeChange?: (jobId: string, startAt: Date, endAt: Date) => void;
 };
@@ -548,6 +569,7 @@ function TimeGrid({
   divisionBookingWindows = null,
   workSchedules,
   arrivalWindowHours = DEFAULT_ARRIVAL_WINDOW_HOURS,
+  returnTo,
   onSlotClick,
   onJobTimeChange,
 }: TimeGridProps) {
@@ -724,7 +746,7 @@ function TimeGrid({
                       <Tooltip key={job.id}>
                         <TooltipTrigger asChild>
                           <Link
-                            href={job.kind === "TIME_OFF" ? "/schedule?panel=team" : `/visits/${job.id}`}
+                            href={scheduleJobHref(job, returnTo)}
                             className="absolute z-10 flex items-center gap-2 overflow-hidden rounded border px-2 py-1 text-[10px] shadow-sm transition-shadow hover:shadow-md"
                             style={{
                               top: lane * MULTI_DAY_ROW_HEIGHT + 4,
@@ -744,9 +766,10 @@ function TimeGrid({
                             )}
                             <div className="min-w-0 flex-1">
                               <p className="truncate font-medium">
-                                {job.kind === "TIME_OFF" ? job.title : jobLocation(job)}
+                                {job.kind === "TIME_OFF" ? job.title : job.customer?.name ?? job.title}
                               </p>
                               <p className="truncate text-muted-foreground">
+                                {job.kind === "TIME_OFF" ? "" : `${jobAddress(job)} · `}
                                 {format(start, "h:mm a")} – {format(end, "h:mm a")}
                                 {job.crew ? ` · ${job.crew.name}` : ""}
                               </p>
@@ -892,6 +915,7 @@ function TimeGrid({
                               colorBy={colorBy}
                               columnWidth={techColWidth}
                               startHour={startHour}
+                              returnTo={returnTo}
                               onTimeChange={onJobTimeChange}
                             />
                           ))}
@@ -944,6 +968,7 @@ function TimeGrid({
                       colorBy={colorBy}
                       columnWidth={dayWidth}
                       startHour={startHour}
+                      returnTo={returnTo}
                       onTimeChange={onJobTimeChange}
                     />
                   ))}
@@ -1115,6 +1140,7 @@ type Props = {
   divisionBookingWindows?: DivisionBookingWindows | null;
   workSchedules?: Record<string, WorkScheduleDayDTO[]>;
   arrivalWindowHours?: number;
+  returnTo?: string;
   onDayClick?: (day: Date) => void;
   onSlotClick?: (slot: ScheduleSlotClick) => void;
   onJobTimeChange?: (jobId: string, startAt: Date, endAt: Date) => void;
@@ -1133,6 +1159,7 @@ export function WeekGrid({
   divisionBookingWindows,
   workSchedules,
   arrivalWindowHours,
+  returnTo = "/schedule",
   onDayClick,
   onSlotClick,
   onJobTimeChange,
@@ -1154,6 +1181,7 @@ export function WeekGrid({
       divisionBookingWindows={divisionBookingWindows}
       workSchedules={workSchedules}
       arrivalWindowHours={arrivalWindowHours}
+      returnTo={returnTo}
       onSlotClick={onSlotClick}
       onJobTimeChange={onJobTimeChange}
     />

@@ -33,27 +33,45 @@ export default function CustomerJobsPage() {
     }>
   >([]);
   const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const params = search ? `?search=${encodeURIComponent(search)}` : "";
-    fetch(`/api/visits${params}`)
+    const params = new URLSearchParams();
+    if (search) params.set("search", search);
+    if (status) params.set("status", status);
+    fetch(`/api/visits${params.size ? `?${params.toString()}` : ""}`)
       .then((r) => r.json())
       .then((data) => setVisits(data.visits ?? []))
       .catch(() => toast.error("Failed to load visits"))
       .finally(() => setLoading(false));
-  }, [search]);
+  }, [search, status]);
 
   return (
     <ContentArea>
       <PageHeader breadcrumb={["Customers", "Visits"]} title="Visits" />
-      <div className="mb-4">
+      <div className="mb-4 flex flex-wrap gap-2">
         <Input
           placeholder="Search visits"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-sm"
         />
+        <select
+          value={status}
+          onChange={(event) => setStatus(event.target.value)}
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+          aria-label="Visit status"
+        >
+          <option value="">All except cancelled</option>
+          <option value="UNSCHEDULED">Unscheduled</option>
+          <option value="SCHEDULED">Scheduled</option>
+          <option value="EN_ROUTE">En route</option>
+          <option value="IN_PROGRESS">In progress</option>
+          <option value="PAUSED">Paused</option>
+          <option value="COMPLETED">Completed</option>
+          <option value="CANCELLED">Cancelled</option>
+        </select>
       </div>
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading...</p>

@@ -356,7 +356,7 @@ export function CustomerProfile({ customerId }: Props) {
   }
 
   const load = useCallback(async () => {
-    const [customerRes, propertiesRes, phonesRes, estimatesRes, invoicesRes, enrollmentsRes] =
+    const [customerRes, propertiesRes, phonesRes, estimatesRes, invoicesRes, enrollmentsRes, historyRes] =
       await Promise.all([
       fetch(`/api/customers/${customerId}`),
       fetch(`/api/customers/${customerId}/properties`),
@@ -366,6 +366,7 @@ export function CustomerProfile({ customerId }: Props) {
         ? fetch(`/api/invoices?customerId=${customerId}`)
         : Promise.resolve(null),
       fetch(`/api/maintenance-plans/enrollments?customerId=${customerId}`),
+      fetch(`/api/customers/${customerId}/history`),
     ]);
 
     if (customerRes.ok) setCustomer(await customerRes.json());
@@ -391,6 +392,7 @@ export function CustomerProfile({ customerId }: Props) {
       const data = await enrollmentsRes.json();
       setEnrollments(data.enrollments ?? []);
     }
+    const historyData = historyRes.ok ? await historyRes.json() : null;
 
     const now = new Date();
     const start = new Date(now.getFullYear() - 1, 0, 1).toISOString();
@@ -398,7 +400,22 @@ export function CustomerProfile({ customerId }: Props) {
     const scheduleRes = await fetch(`/api/schedule/jobs?start=${start}&end=${end}`);
     if (scheduleRes.ok) {
       const jobs = await scheduleRes.json();
-      setVisits(jobs.filter((j: { customer?: { id: string } }) => j.customer?.id === customerId));
+      const activeVisits = jobs.filter((j: { customer?: { id: string } }) => j.customer?.id === customerId);
+      const activeIds = new Set(activeVisits.map((visit: { id: string }) => visit.id));
+      const cancelledVisits = (historyData?.visits ?? [])
+        .filter((visit: { id: string; status: string }) => visit.status === "CANCELLED" && !activeIds.has(visit.id))
+        .map((visit: { id: string; title: string; status: string; startAt: string; assignedUserName: string | null }) => ({
+          id: visit.id,
+          title: visit.title,
+          status: visit.status,
+          startAt: visit.startAt,
+          assignedUser: visit.assignedUserName ? { id: "", name: visit.assignedUserName } : null,
+          crew: null,
+        }));
+      setVisits([...activeVisits, ...cancelledVisits].sort(
+        (a: { startAt: string }, b: { startAt: string }) =>
+          new Date(b.startAt).getTime() - new Date(a.startAt).getTime()
+      ));
     }
   }, [customerId, canViewInvoices]);
 

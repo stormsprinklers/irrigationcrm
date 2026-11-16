@@ -122,7 +122,7 @@ export async function createCardSetupCheckoutSession(params: {
       submit: {
         message:
           params.purpose === "estimate_pay_later"
-            ? `Save your card securely with ${company?.name ?? "us"}. You will not be charged today.`
+            ? `Save your card securely on file with ${company?.name ?? "us"} for future authorized payments. Saving a card does not process a payment.`
             : `Save your card with ${company?.name ?? "us"} for maintenance plan billing and faster checkout.`,
       },
     },

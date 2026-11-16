@@ -100,11 +100,32 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
 
     await markInboundConversationRead(user.companyId, id);
 
+    const inboundMessages = await prisma.message.findMany({
+      where: { conversationId: id, direction: "INBOUND" },
+      select: { id: true },
+    });
+    if (inboundMessages.length > 0) {
+      await prisma.messageReadReceipt.createMany({
+        data: inboundMessages.map((message) => ({
+          messageId: message.id,
+          userId: user.id,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
     const messages = await prisma.message.findMany({
       where: { conversationId: id },
       include: {
         sender: { select: { id: true, name: true, email: true } },
         media: true,
+        readReceipts: {
+          select: {
+            readAt: true,
+            user: { select: { id: true, name: true } },
+          },
+          orderBy: { readAt: "asc" },
+        },
       },
       orderBy: { sentAt: "asc" },
     });
@@ -114,14 +135,28 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       select: { twilioMessageSid: true, campaign: { select: { name: true } } },
     }) : [];
     const campaignBySid = new Map(campaignSends.map((send) => [send.twilioMessageSid, send.campaign.name]));
+    const readReceiptAudience = await prisma.user.findMany({
+      where: {
+        companyId: user.companyId,
+        status: "ACTIVE",
+        systemKind: null,
+      },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
 
     return NextResponse.json({
       conversation,
+      readReceiptAudience,
       messages: messages.map((msg) => ({
         ...msg,
         campaignName: msg.twilioMessageSid ? campaignBySid.get(msg.twilioMessageSid) ?? null : null,
         sentAt: msg.sentAt.toISOString(),
         readAt: msg.readAt?.toISOString() ?? null,
+        readReceipts: msg.readReceipts.map((receipt) => ({
+          readAt: receipt.readAt.toISOString(),
+          user: receipt.user,
+        })),
         contactInfoAppliedAt: msg.contactInfoAppliedAt?.toISOString() ?? null,
       })),
     });

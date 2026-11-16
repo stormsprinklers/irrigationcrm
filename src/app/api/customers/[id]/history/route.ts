@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { VisitStatus } from "@prisma/client";
 import { requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 
@@ -22,7 +21,6 @@ export async function GET(request: NextRequest, { params }: Params) {
         where: {
           companyId: user.companyId,
           customerId,
-          status: { not: VisitStatus.CANCELLED },
           ...(excludeVisitId ? { id: { not: excludeVisitId } } : {}),
         },
         select: {

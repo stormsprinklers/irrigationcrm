@@ -7,7 +7,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useSession } from "next-auth/react";
 import { isFieldRole, canViewProfitMargins } from "@/lib/employees";
-import { ArrowLeft, CheckCircle2, CreditCard, Trash2, Wrench } from "lucide-react";
+import { ArrowLeft, Ban, CheckCircle2, CreditCard, RotateCcw, Trash2, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { CollectPaymentButton } from "@/components/payments/CollectPaymentButton";
 import { VisitBillingDialog } from "@/components/invoices/VisitBillingDialog";
@@ -214,6 +214,11 @@ export function VisitDetail({ visitId }: Props) {
   const showJobCosts = ["ADMIN", "MANAGER", "TECH", "INSTALLER"].includes(session?.user?.role ?? "");
   const paymentStatus = searchParams.get("payment");
   const sessionId = searchParams.get("session_id");
+  const requestedReturnTo = searchParams.get("returnTo");
+  const scheduleHref =
+    requestedReturnTo === "/schedule" || requestedReturnTo?.startsWith("/schedule?")
+      ? requestedReturnTo
+      : "/schedule";
   const [visit, setVisit] = useState<VisitDetailData | null>(null);
   const [timeEvents, setTimeEvents] = useState<TimeEvent[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
@@ -222,6 +227,9 @@ export function VisitDetail({ visitId }: Props) {
   const [timeLoading, setTimeLoading] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [reopening, setReopening] = useState(false);
   const [partsRunOpen, setPartsRunOpen] = useState(false);
   const [billingOpen, setBillingOpen] = useState(false);
 
@@ -356,10 +364,51 @@ export function VisitDetail({ visitId }: Props) {
         return;
       }
       toast.success("Visit deleted");
-      router.push("/schedule");
+      router.push(scheduleHref);
     } finally {
       setDeleting(false);
       setDeleteOpen(false);
+    }
+  }
+
+  async function cancelVisit() {
+    setCancelling(true);
+    try {
+      const res = await fetch(`/api/visits/${visitId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "CANCELLED" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to cancel visit");
+        return;
+      }
+      toast.success("Visit cancelled. Notes and history were preserved.");
+      await load();
+    } finally {
+      setCancelling(false);
+      setCancelOpen(false);
+    }
+  }
+
+  async function reopenVisit() {
+    setReopening(true);
+    try {
+      const res = await fetch(`/api/visits/${visitId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "UNSCHEDULED", notifyCustomer: false }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to reopen visit");
+        return;
+      }
+      toast.success("Visit reopened. Choose a new time to put it back on the schedule.");
+      await load();
+    } finally {
+      setReopening(false);
     }
   }
 
@@ -372,7 +421,7 @@ export function VisitDetail({ visitId }: Props) {
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">Visit not found.</p>
         <Button variant="outline" asChild>
-          <Link href="/schedule">
+          <Link href={scheduleHref}>
             <ArrowLeft className="h-4 w-4" />
             Back to schedule
           </Link>
@@ -404,7 +453,7 @@ export function VisitDetail({ visitId }: Props) {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <Button variant="ghost" size="sm" className="mb-2 -ml-2" asChild>
-            <Link href="/schedule">
+            <Link href={scheduleHref}>
               <ArrowLeft className="h-4 w-4" />
               Schedule
             </Link>
@@ -423,6 +472,17 @@ export function VisitDetail({ visitId }: Props) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {visit.status === "CANCELLED" ? canDelete ? (
+            <Button type="button" variant="outline" size="sm" onClick={() => void reopenVisit()} disabled={reopening}>
+              <RotateCcw className="h-4 w-4" />
+              {reopening ? "Reopening..." : "Reopen visit"}
+            </Button>
+          ) : null : visit.status !== "COMPLETED" ? (
+            <Button type="button" variant="outline" size="sm" onClick={() => setCancelOpen(true)}>
+              <Ban className="h-4 w-4" />
+              Cancel visit
+            </Button>
+          ) : null}
           {canChooseBillingAmount ? (
             <Button
               type="button"
@@ -663,6 +723,17 @@ export function VisitDetail({ visitId }: Props) {
           <VisitEstimatesSection visitId={visit.id} estimates={visit.estimates} customerId={visit.customer?.id} propertyId={visit.property?.id} />
         </div>
       </div>
+
+      <ConfirmDialog
+        open={cancelOpen}
+        title="Cancel visit?"
+        description={`“${visit.title}” will be removed from the active schedule, but its notes, line items, attachments, estimates, invoices, and history will be preserved. You can reopen it later if the customer changes their mind.`}
+        confirmLabel="Cancel visit"
+        confirmVariant="destructive"
+        busy={cancelling}
+        onConfirm={cancelVisit}
+        onCancel={() => setCancelOpen(false)}
+      />
 
       <ConfirmDialog
         open={deleteOpen}
