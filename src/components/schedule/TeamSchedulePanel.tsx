@@ -19,6 +19,13 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { TimeOffRequestDTO, WorkScheduleDayDTO } from "@/lib/schedule/time-off-types";
 import { notifyTimeOffPendingChanged } from "@/contexts/InboxBadgesProvider";
+import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
+import {
+  instantToLocalWallDate,
+  localWallDateToUtc,
+  zonedDateInputValue,
+  zonedWallTimeInputToUtc,
+} from "@/lib/datetime/zoned";
 
 type Employee = {
   id: string;
@@ -51,6 +58,7 @@ type Props = {
 
 export function TeamSchedulePanel({ weekStart, onWeekChange, employees, onClose }: Props) {
   const { data: session } = useSession();
+  const { brand } = useCompanyBrand();
   const role = session?.user?.role ?? "TECH";
   const canManage = role === "ADMIN" || role === "MANAGER" || role === "CSR";
 
@@ -66,8 +74,8 @@ export function TeamSchedulePanel({ weekStart, onWeekChange, employees, onClose 
   const [loading, setLoading] = useState(true);
   const [submittingRequest, setSubmittingRequest] = useState(false);
   const [requestForm, setRequestForm] = useState({
-    startDate: format(new Date(), "yyyy-MM-dd"),
-    endDate: format(new Date(), "yyyy-MM-dd"),
+    startDate: zonedDateInputValue(new Date(), brand.timezone),
+    endDate: zonedDateInputValue(new Date(), brand.timezone),
     allDay: true,
     type: "TIME_OFF",
     reason: "",
@@ -89,20 +97,29 @@ export function TeamSchedulePanel({ weekStart, onWeekChange, employees, onClose 
     try {
       const params = new URLSearchParams({
         userId: selectedUserId,
-        start: weekStart.toISOString(),
-        end: new Date(weekEnd.getTime() + 1).toISOString(),
+        start: localWallDateToUtc(weekStart, brand.timezone).toISOString(),
+        end: localWallDateToUtc(
+          new Date(weekEnd.getTime() + 1),
+          brand.timezone
+        ).toISOString(),
       });
       const res = await fetch(`/api/schedule/team?${params}`);
       if (!res.ok) throw new Error("Failed to load");
       const data = await res.json();
       setWorkSchedule(data.workSchedule ?? []);
-      setTimeOff(data.timeOff ?? []);
+      setTimeOff(
+        (data.timeOff ?? []).map((request: TimeOffRequestDTO) => ({
+          ...request,
+          startAt: instantToLocalWallDate(request.startAt, brand.timezone).toISOString(),
+          endAt: instantToLocalWallDate(request.endAt, brand.timezone).toISOString(),
+        }))
+      );
     } catch {
       toast.error("Failed to load team schedule");
     } finally {
       setLoading(false);
     }
-  }, [selectedUserId, weekStart, weekEnd]);
+  }, [selectedUserId, weekStart, weekEnd, brand.timezone]);
 
   const loadPending = useCallback(async () => {
     if (!canManage) return;
@@ -110,12 +127,18 @@ export function TeamSchedulePanel({ weekStart, onWeekChange, employees, onClose 
       const res = await fetch("/api/schedule/time-off/pending");
       if (res.ok) {
         const data = await res.json();
-        setPendingRequests(data.requests ?? []);
+        setPendingRequests(
+          (data.requests ?? []).map((request: TimeOffRequestDTO) => ({
+            ...request,
+            startAt: instantToLocalWallDate(request.startAt, brand.timezone).toISOString(),
+            endAt: instantToLocalWallDate(request.endAt, brand.timezone).toISOString(),
+          }))
+        );
       }
     } catch {
       // ignore
     }
-  }, [canManage]);
+  }, [canManage, brand.timezone]);
 
   useEffect(() => {
     if (!selectedUserId && defaultUserId) {
@@ -135,8 +158,14 @@ export function TeamSchedulePanel({ weekStart, onWeekChange, employees, onClose 
     if (!selectedUserId) return;
     setSubmittingRequest(true);
     try {
-      const startAt = new Date(`${requestForm.startDate}T00:00:00`);
-      const endAt = new Date(`${requestForm.endDate}T23:59:59`);
+      const startAt = zonedWallTimeInputToUtc(
+        `${requestForm.startDate}T00:00:00`,
+        brand.timezone
+      );
+      const endAt = zonedWallTimeInputToUtc(
+        `${requestForm.endDate}T23:59:59`,
+        brand.timezone
+      );
       const res = await fetch("/api/schedule/time-off", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

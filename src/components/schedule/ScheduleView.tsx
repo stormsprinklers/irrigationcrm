@@ -40,6 +40,11 @@ import { useInboxBadges } from "@/contexts/InboxBadgesProvider";
 import { useSession } from "next-auth/react";
 import { isFieldRole } from "@/lib/employees";
 import { Button } from "@/components/ui/button";
+import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
+import {
+  instantToLocalWallDate,
+  localWallDateToUtc,
+} from "@/lib/datetime/zoned";
 
 type FilterOptions = {
   serviceAreas: { id: string; name: string; color: string }[];
@@ -131,6 +136,14 @@ function timeOffAsScheduleJob(
   };
 }
 
+function displayJobInCompanyTimezone(job: ScheduleJobDTO, timeZone: string): ScheduleJobDTO {
+  return {
+    ...job,
+    startAt: instantToLocalWallDate(job.startAt, timeZone).toISOString(),
+    endAt: instantToLocalWallDate(job.endAt, timeZone).toISOString(),
+  };
+}
+
 export function ScheduleView({
   embedded = false,
   initialDate,
@@ -142,11 +155,16 @@ export function ScheduleView({
 } = {}) {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { brand } = useCompanyBrand();
+  const companyTimezone = brand.timezone;
   const { data: session } = useSession();
   const fieldRole = isFieldRole(session?.user?.role ?? "");
   const inboxBadges = useInboxBadges();
   const timeOffPending = fieldRole ? 0 : inboxBadges?.timeOffPending ?? 0;
-  const initialAnchor = scheduleDateFromParam(initialDate ?? searchParams.get("date"));
+  const requestedDate = initialDate ?? searchParams.get("date");
+  const initialAnchor = requestedDate
+    ? scheduleDateFromParam(requestedDate)
+    : instantToLocalWallDate(new Date(), companyTimezone);
   const initialViewMode = initialDate ? "day" : scheduleViewFromParam(searchParams.get("view"));
   const [viewMode, setViewMode] = useState<ScheduleViewMode>(initialViewMode);
   const [weekStart, setWeekStart] = useState(() => startOfWeek(initialAnchor, { weekStartsOn: 0 }));
@@ -322,8 +340,11 @@ export function ScheduleView({
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const start = rangeStart.toISOString();
-      const end = new Date(rangeEnd.getTime() + 1).toISOString();
+      const start = localWallDateToUtc(rangeStart, companyTimezone).toISOString();
+      const end = localWallDateToUtc(
+        new Date(rangeEnd.getTime() + 1),
+        companyTimezone
+      ).toISOString();
 
       const jobsParams = new URLSearchParams({ start, end });
       buildFilterQuery(jobsParams);
@@ -354,7 +375,7 @@ export function ScheduleView({
             crews: loadedFilters?.crews ?? [],
           })
         ),
-      ]);
+      ].map((job) => displayJobInCompanyTimezone(job, companyTimezone)));
       if (summaryRes.ok) {
         const data = await summaryRes.json();
         setSummary({
@@ -377,14 +398,14 @@ export function ScheduleView({
     } finally {
       setLoading(false);
     }
-  }, [rangeStart, rangeEnd, buildFilterQuery]);
+  }, [rangeStart, rangeEnd, buildFilterQuery, companyTimezone]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
   function goToToday() {
-    const today = startOfDay(new Date());
+    const today = startOfDay(instantToLocalWallDate(new Date(), companyTimezone));
     setFocusDay(today);
     setWeekStart(startOfWeek(today, { weekStartsOn: 0 }));
     setMonthStart(startOfMonth(today));
@@ -415,12 +436,14 @@ export function ScheduleView({
     );
 
     try {
+      const savedStartAt = localWallDateToUtc(startAt, companyTimezone);
+      const savedEndAt = localWallDateToUtc(endAt, companyTimezone);
       const response = await fetch(`/api/schedule/jobs/${jobId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          startAt: startAt.toISOString(),
-          endAt: endAt.toISOString(),
+          startAt: savedStartAt.toISOString(),
+          endAt: savedEndAt.toISOString(),
           notifyCustomer,
         }),
       });
@@ -432,7 +455,11 @@ export function ScheduleView({
         toast.error(data.error ?? "Failed to update the arrival window");
         return false;
       }
-      setJobs((current) => current.map((job) => (job.id === jobId ? data : job)));
+      setJobs((current) =>
+        current.map((job) =>
+          job.id === jobId ? displayJobInCompanyTimezone(data, companyTimezone) : job
+        )
+      );
       if (data.warning) toast.warning(data.warning);
       toast.success("Arrival window updated");
       return true;
@@ -612,6 +639,7 @@ export function ScheduleView({
         employees={filterOptions.employees}
         crews={filterOptions.crews}
         workSchedules={filterOptions.openTimeSlots?.workSchedules}
+        companyTimezone={companyTimezone}
         onClose={() => setQuickAddSlot(null)}
         onCreated={() => {
           void loadData();

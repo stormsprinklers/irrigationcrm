@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { buildInboxCustomerUrl } from "@/lib/inbox/links";
+import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
+import { formatInTimezone } from "@/lib/datetime/zoned";
 
 type Customer = {
   id: string;
@@ -61,6 +63,7 @@ type Props = {
 };
 
 export function CustomerVisitPanel({ customer, visitId, jobAddress, mapsUrl, onCustomerLinked }: Props) {
+  const { brand } = useCompanyBrand();
   const [historyExpanded, setHistoryExpanded] = useState(false);
   const [history, setHistory] = useState<HistoryData | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -237,7 +240,11 @@ export function CustomerVisitPanel({ customer, visitId, jobAddress, mapsUrl, onC
                             <div className="min-w-0">
                               <p className="truncate font-medium">{visit.title}</p>
                               <p className="text-xs text-muted-foreground">
-                                {format(new Date(visit.startAt), "MMM d, yyyy")} ·{" "}
+                                {formatInTimezone(visit.startAt, brand.timezone, {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })} ·{" "}
                                 {visit.assignedUserName ?? "Unassigned"} ·{" "}
                                 {visit.status.replace(/_/g, " ")}
                               </p>

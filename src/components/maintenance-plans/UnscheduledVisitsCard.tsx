@@ -12,6 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { SchedulePeekModal } from "@/components/schedule/SchedulePeekModal";
 import type { ScheduleSlotClick } from "@/lib/schedule/quick-add";
+import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
+import { zonedWallTimeInputToUtc } from "@/lib/datetime/zoned";
 import {
   Table,
   TableBody,
@@ -43,6 +45,7 @@ const selectClassName =
 
 export function UnscheduledVisitsCard() {
   const router = useRouter();
+  const { brand } = useCompanyBrand();
   const [visits, setVisits] = useState<UnscheduledVisit[]>([]);
   const [loading, setLoading] = useState(true);
   const [schedulingId, setSchedulingId] = useState<string | null>(null);
@@ -83,8 +86,11 @@ export function UnscheduledVisitsCard() {
       return;
     }
 
-    const startAt = new Date(`${scheduleDate}T${startTime}`);
-    const endAt = new Date(`${scheduleDate}T${endTime}`);
+    const startAt = zonedWallTimeInputToUtc(
+      `${scheduleDate}T${startTime}`,
+      brand.timezone
+    );
+    const endAt = zonedWallTimeInputToUtc(`${scheduleDate}T${endTime}`, brand.timezone);
     if (!scheduleDate || Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {
       toast.error("Choose a date and time before scheduling this visit");
       return;

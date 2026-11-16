@@ -33,10 +33,15 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { computeTotals, sumDiscounts, sumLineItems } from "@/lib/visits/totals";
 import { formatPostalAddress, googleMapsDirectionsUrl } from "@/lib/maps";
 import { requestCurrentPosition } from "@/lib/maps/geolocation";
-import { useMaintenancePlansFeatures, useIrrigationFeatures } from "@/components/layout/CompanyBrandProvider";
+import {
+  useCompanyBrand,
+  useMaintenancePlansFeatures,
+  useIrrigationFeatures,
+} from "@/components/layout/CompanyBrandProvider";
 import type { VisitEtaDisplay } from "@/components/visits/TimeTrackingBar";
 import { canAccessInvoices } from "@/lib/invoices/permissions";
 import { canEditVisitHolidayLightingSpecs } from "@/lib/holiday-lighting/spec-permissions";
+import { formatInTimezone } from "@/lib/datetime/zoned";
 
 type VisitDetailData = {
   id: string;
@@ -202,6 +207,7 @@ function getVisitPaymentSummary(visit: VisitDetailData) {
 }
 
 export function VisitDetail({ visitId }: Props) {
+  const { brand } = useCompanyBrand();
   const searchParams = useSearchParams();
   const router = useRouter();
   const { data: session } = useSession();
@@ -468,7 +474,12 @@ export function VisitDetail({ visitId }: Props) {
             <Badge variant="secondary">{visit.division}</Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            {format(new Date(visit.startAt), "EEE, MMM d, yyyy")}
+            {formatInTimezone(visit.startAt, brand.timezone, {
+              weekday: "short",
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+            })}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

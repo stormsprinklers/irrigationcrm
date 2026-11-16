@@ -8,6 +8,12 @@ import { getUserCrewIds } from "@/lib/field/access";
 import { sumDiscounts, sumLineItems, toNumber } from "./totals";
 import type { ScheduleFilters, VisitDTO } from "./types";
 import { attachEstimateInvoicesForVisit } from "@/lib/estimates/attach-invoices-to-visit";
+import {
+  addressNeedsGoogleNormalization,
+  formatAddressQuery,
+  geocodeAddress,
+  getGoogleMapsApiKey,
+} from "@/lib/customers/maps";
 
 export const visitInclude = {
   customer: {
@@ -118,6 +124,105 @@ export const visitDetailInclude = {
 
 type VisitPayload = Prisma.VisitGetPayload<{ include: typeof visitInclude }>;
 type VisitProperty = NonNullable<VisitPayload["property"]>;
+type AddressRecord = {
+  id: string;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+};
+
+type AddressRepairTarget = {
+  key: string;
+  kind: "visit" | "property" | "customer";
+  record: AddressRecord;
+  companyId: string;
+};
+
+function queueAddressRepair(
+  targets: Map<string, AddressRepairTarget>,
+  kind: AddressRepairTarget["kind"],
+  record: AddressRecord | null,
+  companyId: string
+) {
+  if (!record || !addressNeedsGoogleNormalization(record)) return;
+  const key = `${kind}:${record.id}`;
+  targets.set(key, { key, kind, record, companyId });
+}
+
+async function repairScheduleAddressesWithGoogle(
+  visits: VisitPayload[],
+  fallbackPropertyByCustomerId: Map<string, VisitProperty>
+) {
+  const apiKey = getGoogleMapsApiKey().trim();
+  if (!apiKey) return;
+
+  const targets = new Map<string, AddressRepairTarget>();
+  for (const visit of visits) {
+    const fallbackProperty = visit.customerId
+      ? fallbackPropertyByCustomerId.get(visit.customerId) ?? null
+      : null;
+    queueAddressRepair(targets, "visit", visit, visit.companyId);
+    queueAddressRepair(
+      targets,
+      "property",
+      visit.property ?? fallbackProperty,
+      visit.companyId
+    );
+    queueAddressRepair(targets, "customer", visit.customer, visit.companyId);
+  }
+
+  const pending = [...targets.values()].slice(0, 25);
+  const geocodeCache = new Map<string, ReturnType<typeof geocodeAddress>>();
+  for (let index = 0; index < pending.length; index += 5) {
+    await Promise.all(
+      pending.slice(index, index + 5).map(async (target) => {
+        const query = formatAddressQuery(target.record);
+        if (!query) return;
+        let lookup = geocodeCache.get(query);
+        if (!lookup) {
+          lookup = geocodeAddress(query, apiKey).catch(() => null);
+          geocodeCache.set(query, lookup);
+        }
+        const normalized = await lookup;
+        if (
+          !normalized ||
+          normalized.partialMatch ||
+          !normalized.address ||
+          !normalized.city ||
+          !normalized.state ||
+          !normalized.zip
+        ) {
+          return;
+        }
+
+        const data = {
+          address: normalized.address,
+          city: normalized.city,
+          state: normalized.state,
+          zip: normalized.zip,
+        };
+        if (target.kind === "visit") {
+          await prisma.visit.updateMany({
+            where: { id: target.record.id, companyId: target.companyId },
+            data,
+          });
+        } else if (target.kind === "property") {
+          await prisma.customerProperty.updateMany({
+            where: { id: target.record.id, companyId: target.companyId },
+            data: { ...data, latitude: normalized.lat, longitude: normalized.lng },
+          });
+        } else {
+          await prisma.customer.updateMany({
+            where: { id: target.record.id, companyId: target.companyId },
+            data,
+          });
+        }
+        Object.assign(target.record, data);
+      })
+    );
+  }
+}
 
 function serializeVisitWithProperty(
   visit: VisitPayload,
@@ -171,7 +276,10 @@ export function serializeVisit(visit: VisitPayload): VisitDTO {
  * that customer's primary property. Visit detail already resolves that fallback;
  * do the same in list/schedule payloads so cards do not incorrectly show “No city”.
  */
-export async function serializeVisits(visits: VisitPayload[]): Promise<VisitDTO[]> {
+export async function serializeVisits(
+  visits: VisitPayload[],
+  options: { repairAddresses?: boolean } = {}
+): Promise<VisitDTO[]> {
   const customerIds = [
     ...new Set(
       visits
@@ -180,22 +288,26 @@ export async function serializeVisits(visits: VisitPayload[]): Promise<VisitDTO[
     ),
   ];
 
-  if (!customerIds.length) return visits.map((visit) => serializeVisit(visit));
-
-  const fallbackProperties = await prisma.customerProperty.findMany({
-    where: {
-      companyId: visits[0].companyId,
-      customerId: { in: customerIds },
-    },
-    orderBy: [{ isPrimary: "desc" }, { name: "asc" }],
-    select: { ...visitInclude.property.select, customerId: true },
-  });
+  const fallbackProperties = customerIds.length
+    ? await prisma.customerProperty.findMany({
+        where: {
+          companyId: visits[0].companyId,
+          customerId: { in: customerIds },
+        },
+        orderBy: [{ isPrimary: "desc" }, { name: "asc" }],
+        select: { ...visitInclude.property.select, customerId: true },
+      })
+    : [];
   const propertyByCustomerId = new Map<string, VisitProperty>();
   for (const property of fallbackProperties) {
     const { customerId, ...visitProperty } = property;
     if (!propertyByCustomerId.has(customerId)) {
       propertyByCustomerId.set(customerId, visitProperty);
     }
+  }
+
+  if (options.repairAddresses) {
+    await repairScheduleAddressesWithGoogle(visits, propertyByCustomerId);
   }
 
   return visits.map((visit) =>
@@ -291,7 +403,7 @@ export async function listVisits(
     include: visitInclude,
     orderBy: { startAt: "asc" },
   });
-  return serializeVisits(visits);
+  return serializeVisits(visits, { repairAddresses: true });
 }
 
 export async function getScheduleSummary(

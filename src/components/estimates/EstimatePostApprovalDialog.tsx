@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { addDays, addHours, format } from "date-fns";
+import { addHours, format } from "date-fns";
 import { CalendarClock, CreditCard, Loader2, Mail, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,13 @@ import { CollectPaymentButton } from "@/components/payments/CollectPaymentButton
 import { EmployeeMultiSelect } from "@/components/schedule/EmployeeMultiSelect";
 import { SchedulePeekModal } from "@/components/schedule/SchedulePeekModal";
 import type { ScheduleSlotClick } from "@/lib/schedule/quick-add";
+import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
+import {
+  addZonedDays,
+  instantToLocalWallDate,
+  zonedDateTimeInputValue,
+  zonedWallTimeInputToUtc,
+} from "@/lib/datetime/zoned";
 
 type Props = {
   open: boolean;
@@ -79,11 +86,15 @@ export function EstimatePostApprovalDialog({
   onConverted,
 }: Props) {
   const router = useRouter();
+  const { brand } = useCompanyBrand();
+  const companyTimezone = brand.timezone;
   const [step, setStep] = useState<Step>("timing");
   const [saving, setSaving] = useState(false);
-  const [startLocal, setStartLocal] = useState(() => toLocalInputValue(addHours(new Date(), 24)));
+  const [startLocal, setStartLocal] = useState(() =>
+    zonedDateTimeInputValue(addHours(new Date(), 24), companyTimezone)
+  );
   const [endLocal, setEndLocal] = useState(() =>
-    toLocalInputValue(addHours(addHours(new Date(), 24), 2))
+    zonedDateTimeInputValue(addHours(new Date(), 26), companyTimezone)
   );
   const [threshold, setThreshold] = useState(1000);
   const [percent, setPercent] = useState(50);
@@ -179,9 +190,12 @@ export function EstimatePostApprovalDialog({
       return;
     }
 
-    const dayStart = new Date(`${scheduleDate}T00:00:00`);
+    const dayStart = zonedWallTimeInputToUtc(
+      `${scheduleDate}T00:00:00`,
+      companyTimezone
+    );
     if (Number.isNaN(dayStart.getTime())) return;
-    const dayEnd = addDays(dayStart, 1);
+    const dayEnd = addZonedDays(dayStart, 1, companyTimezone);
     const params = new URLSearchParams({
       start: dayStart.toISOString(),
       end: dayEnd.toISOString(),
@@ -211,7 +225,7 @@ export function EstimatePostApprovalDialog({
         if (!controller.signal.aborted) setSchedulePreviewLoading(false);
       });
     return () => controller.abort();
-  }, [assignedUserIds, open, scheduleDate, step]);
+  }, [assignedUserIds, open, scheduleDate, step, companyTimezone]);
 
   const previewDeposit = useMemo(() => {
     if (estimateTotal <= threshold) return 0;
@@ -228,8 +242,8 @@ export function EstimatePostApprovalDialog({
       };
 
       if (timing === "another_day") {
-        const startAt = new Date(startLocal);
-        const endAt = new Date(endLocal);
+        const startAt = zonedWallTimeInputToUtc(startLocal, companyTimezone);
+        const endAt = zonedWallTimeInputToUtc(endLocal, companyTimezone);
         if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime()) || endAt <= startAt) {
           toast.error("Choose a valid start and end time");
           return;
@@ -403,8 +417,8 @@ export function EstimatePostApprovalDialog({
   }
 
   function overlapsProposedTime(entry: TechnicianScheduleEntry) {
-    const proposedStart = new Date(startLocal);
-    const proposedEnd = new Date(endLocal);
+    const proposedStart = zonedWallTimeInputToUtc(startLocal, companyTimezone);
+    const proposedEnd = zonedWallTimeInputToUtc(endLocal, companyTimezone);
     return (
       !Number.isNaN(proposedStart.getTime()) &&
       !Number.isNaN(proposedEnd.getTime()) &&
@@ -562,8 +576,14 @@ export function EstimatePostApprovalDialog({
                                     ) : null}
                                   </div>
                                   <p className="text-muted-foreground">
-                                    {format(new Date(entry.startAt), "h:mm a")}–
-                                    {format(new Date(entry.endAt), "h:mm a")}
+                                    {format(
+                                      instantToLocalWallDate(entry.startAt, companyTimezone),
+                                      "h:mm a"
+                                    )}–
+                                    {format(
+                                      instantToLocalWallDate(entry.endAt, companyTimezone),
+                                      "h:mm a"
+                                    )}
                                     {entry.customerName ? ` · ${entry.customerName}` : ""}
                                     {entry.city ? ` · ${entry.city}` : ""}
                                   </p>

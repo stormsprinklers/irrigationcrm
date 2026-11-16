@@ -9,14 +9,14 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { CustomerDTO, CustomerPropertyDTO } from "@/lib/customers/types";
+import { zonedDateInputValue, zonedWallTimeInputToUtc } from "@/lib/datetime/zoned";
 
 const selectClassName =
   "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 
-function defaultVisitTimes() {
-  const date = new Date();
-  date.setDate(date.getDate() + 1);
-  return { date: date.toISOString().slice(0, 10), startTime: "09:00", endTime: "11:00" };
+function defaultVisitTimes(timeZone: string) {
+  const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  return { date: zonedDateInputValue(tomorrow, timeZone), startTime: "09:00", endTime: "11:00" };
 }
 
 type Props = {
@@ -30,7 +30,7 @@ export function CreateCustomerVisitModal({ open, onClose, customer, properties }
   const { brand } = useCompanyBrand();
   const holiday = isHolidayLightingCompany(brand);
   const router = useRouter();
-  const defaults = defaultVisitTimes();
+  const defaults = defaultVisitTimes(brand.timezone);
   const [saving, setSaving] = useState(false);
   const [filterOptions, setFilterOptions] = useState<{
     serviceAreas: { id: string; name: string }[];
@@ -119,8 +119,12 @@ export function CreateCustomerVisitModal({ open, onClose, customer, properties }
       return;
     }
 
-    const startAt = new Date(`${form.date}T${form.startTime}`);
-    const endAt = new Date(`${form.date}T${form.endTime}`);
+    const startAt = zonedWallTimeInputToUtc(`${form.date}T${form.startTime}`, brand.timezone);
+    const endAt = zonedWallTimeInputToUtc(`${form.date}T${form.endTime}`, brand.timezone);
+    if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {
+      toast.error("Enter a valid date and time");
+      return;
+    }
     if (endAt <= startAt) {
       toast.error("End time must be after start time");
       return;

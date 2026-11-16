@@ -12,6 +12,12 @@ import { blobProxyUrl } from "@/lib/blob/urls";
 import type { ScheduleSlotClick } from "@/lib/schedule/quick-add";
 import { validateScheduledVisitAssignment } from "@/lib/schedule/visit-assignment";
 import type { VisitStatus } from "@prisma/client";
+import { useCompanyBrand } from "@/components/layout/CompanyBrandProvider";
+import {
+  formatInTimezone,
+  zonedDateTimeInputValue,
+  zonedWallTimeInputToUtc,
+} from "@/lib/datetime/zoned";
 
 type EmployeeOption = {
   id: string;
@@ -41,19 +47,20 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 
-function toDateInput(iso: string) {
-  const d = new Date(iso);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+function toDateInput(iso: string, timeZone: string) {
+  return zonedDateTimeInputValue(iso, timeZone).slice(0, 10);
 }
 
-function toTimeInput(iso: string) {
-  const d = new Date(iso);
-  const hours = String(d.getHours()).padStart(2, "0");
-  const minutes = String(d.getMinutes()).padStart(2, "0");
-  return `${hours}:${minutes}`;
+function toTimeInput(iso: string, timeZone: string) {
+  return zonedDateTimeInputValue(iso, timeZone).slice(11, 16);
+}
+
+function localDateInput(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function localTimeInput(date: Date) {
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
 function TechnicianAvatar({ employee }: { employee: EmployeeOption }) {
@@ -83,10 +90,12 @@ export function VisitScheduleSection({
   canEdit,
   onUpdated,
 }: Props) {
+  const { brand } = useCompanyBrand();
+  const companyTimezone = brand.timezone;
   const [visitTitle, setVisitTitle] = useState(title);
-  const [date, setDate] = useState(toDateInput(startAt));
-  const [startTime, setStartTime] = useState(toTimeInput(startAt));
-  const [endTime, setEndTime] = useState(toTimeInput(endAt));
+  const [date, setDate] = useState(toDateInput(startAt, companyTimezone));
+  const [startTime, setStartTime] = useState(toTimeInput(startAt, companyTimezone));
+  const [endTime, setEndTime] = useState(toTimeInput(endAt, companyTimezone));
   const [assignedUserIds, setAssignedUserIds] = useState<string[]>(
     assignedUsers.length ? assignedUsers.map((employee) => employee.id) : assignedUser ? [assignedUser.id] : []
   );
@@ -106,10 +115,10 @@ export function VisitScheduleSection({
   }, [title]);
 
   useEffect(() => {
-    setDate(toDateInput(startAt));
-    setStartTime(toTimeInput(startAt));
-    setEndTime(toTimeInput(endAt));
-  }, [startAt, endAt]);
+    setDate(toDateInput(startAt, companyTimezone));
+    setStartTime(toTimeInput(startAt, companyTimezone));
+    setEndTime(toTimeInput(endAt, companyTimezone));
+  }, [startAt, endAt, companyTimezone]);
 
   useEffect(() => {
     setAssignedUserIds(persistedAssigneeKey ? persistedAssigneeKey.split("|") : []);
@@ -141,15 +150,15 @@ export function VisitScheduleSection({
     const nextStart = new Date(`${nextDate}T${nextStartTime}`);
     if (Number.isNaN(nextStart.getTime())) return;
     const nextEnd = new Date(nextStart.getTime() + 2 * 60 * 60 * 1000);
-    setEndTime(toTimeInput(nextEnd.toISOString()));
+    setEndTime(localTimeInput(nextEnd));
   }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (!canEdit) return;
 
-    const nextStart = new Date(`${date}T${startTime}`);
-    const nextEnd = new Date(`${date}T${endTime}`);
+    const nextStart = zonedWallTimeInputToUtc(`${date}T${startTime}`, companyTimezone);
+    const nextEnd = zonedWallTimeInputToUtc(`${date}T${endTime}`, companyTimezone);
     if (Number.isNaN(nextStart.getTime()) || Number.isNaN(nextEnd.getTime())) {
       toast.error("Enter a valid date and time");
       return;
@@ -180,9 +189,9 @@ export function VisitScheduleSection({
     setSaving(true);
     try {
       const scheduleChanged =
-        date !== toDateInput(startAt) ||
-        startTime !== toTimeInput(startAt) ||
-        endTime !== toTimeInput(endAt);
+        date !== toDateInput(startAt, companyTimezone) ||
+        startTime !== toTimeInput(startAt, companyTimezone) ||
+        endTime !== toTimeInput(endAt, companyTimezone);
       const res = await fetch(`/api/visits/${visitId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -213,9 +222,9 @@ export function VisitScheduleSection({
   function applyScheduleSlot(slot: ScheduleSlotClick) {
     const nextStart = slot.startAt;
     const nextEnd = new Date(nextStart.getTime() + 2 * 60 * 60 * 1000);
-    setDate(toDateInput(nextStart.toISOString()));
-    setStartTime(toTimeInput(nextStart.toISOString()));
-    setEndTime(toTimeInput(nextEnd.toISOString()));
+    setDate(localDateInput(nextStart));
+    setStartTime(localTimeInput(nextStart));
+    setEndTime(localTimeInput(nextEnd));
     if (slot.assignedUserId && slot.assignedUserId !== "__unassigned__") {
       setAssignedUserIds((current) => [
         slot.assignedUserId!,
@@ -327,14 +336,26 @@ export function VisitScheduleSection({
         <dl className="space-y-2 text-sm">
           <div>
             <dt className="text-xs text-muted-foreground">Date</dt>
-            <dd className="font-medium">{new Date(startAt).toLocaleDateString()}</dd>
+            <dd className="font-medium">
+              {formatInTimezone(startAt, companyTimezone, {
+                month: "numeric",
+                day: "numeric",
+                year: "numeric",
+              })}
+            </dd>
           </div>
           <div>
             <dt className="text-xs text-muted-foreground">Time</dt>
             <dd className="font-medium">
-              {new Date(startAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+              {formatInTimezone(startAt, companyTimezone, {
+                hour: "numeric",
+                minute: "2-digit",
+              })}
               {" – "}
-              {new Date(endAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+              {formatInTimezone(endAt, companyTimezone, {
+                hour: "numeric",
+                minute: "2-digit",
+              })}
             </dd>
           </div>
           <div>

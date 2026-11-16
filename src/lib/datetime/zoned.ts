@@ -146,3 +146,98 @@ export function formatInTimezone(
     timeZone: resolveNotificationTimezone(timeZone),
   });
 }
+
+function padDatePart(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+/** Format an instant for a date input using the company's wall clock, not the browser's timezone. */
+export function zonedDateInputValue(
+  value: Date | string,
+  timeZone?: string | null
+): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  const parts = getZonedParts(date, resolveNotificationTimezone(timeZone));
+  return `${parts.year}-${padDatePart(parts.month)}-${padDatePart(parts.day)}`;
+}
+
+/** Format an instant for a datetime-local input using the company's wall clock. */
+export function zonedDateTimeInputValue(
+  value: Date | string,
+  timeZone?: string | null
+): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  const parts = getZonedParts(date, resolveNotificationTimezone(timeZone));
+  return `${parts.year}-${padDatePart(parts.month)}-${padDatePart(parts.day)}T${padDatePart(parts.hour)}:${padDatePart(parts.minute)}`;
+}
+
+/** Parse a date/datetime-local value as company-local wall time and return the UTC instant. */
+export function zonedWallTimeInputToUtc(
+  value: string,
+  timeZone?: string | null
+): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(value);
+  if (!match) return new Date(Number.NaN);
+
+  const requested = {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+    hour: Number(match[4] ?? 0),
+    minute: Number(match[5] ?? 0),
+    second: Number(match[6] ?? 0),
+  };
+  const tz = resolveNotificationTimezone(timeZone);
+  const result = zonedWallTimeToUtc(
+    tz,
+    requested.year,
+    requested.month,
+    requested.day,
+    requested.hour,
+    requested.minute,
+    requested.second
+  );
+  const roundTrip = getZonedParts(result, tz);
+  if (
+    roundTrip.year !== requested.year ||
+    roundTrip.month !== requested.month ||
+    roundTrip.day !== requested.day ||
+    roundTrip.hour !== requested.hour ||
+    roundTrip.minute !== requested.minute ||
+    roundTrip.second !== requested.second
+  ) {
+    return new Date(Number.NaN);
+  }
+  return result;
+}
+
+/** Reinterpret a browser-local display Date as company-local wall time. */
+export function localWallDateToUtc(value: Date, timeZone?: string | null): Date {
+  return zonedWallTimeToUtc(
+    resolveNotificationTimezone(timeZone),
+    value.getFullYear(),
+    value.getMonth() + 1,
+    value.getDate(),
+    value.getHours(),
+    value.getMinutes(),
+    value.getSeconds()
+  );
+}
+
+/** Convert an instant to a Date whose browser-local fields equal the company's wall clock fields. */
+export function instantToLocalWallDate(
+  value: Date | string,
+  timeZone?: string | null
+): Date {
+  const date = typeof value === "string" ? new Date(value) : value;
+  const parts = getZonedParts(date, resolveNotificationTimezone(timeZone));
+  return new Date(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second,
+    0
+  );
+}

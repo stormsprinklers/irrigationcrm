@@ -26,6 +26,7 @@ export type CompanyBrand = {
   holidayLightingFeaturesEnabled: boolean;
   maintenancePlansFeaturesEnabled: boolean;
   customerBaseUrl: string | null;
+  timezone: string;
 };
 
 type CompanyBrandContextValue = {
@@ -75,6 +76,7 @@ const fallbackBrand: CompanyBrand = {
   holidayLightingFeaturesEnabled: false,
   maintenancePlansFeaturesEnabled: true,
   customerBaseUrl: null,
+  timezone: "America/Denver",
 };
 
 export function CompanyBrandProvider({ children }: { children: React.ReactNode }) {
@@ -110,6 +112,10 @@ export function CompanyBrandProvider({ children }: { children: React.ReactNode }
         holidayLightingFeaturesEnabled: resolveHolidayFeatures(data),
         maintenancePlansFeaturesEnabled: resolveMaintenanceFeatures(data),
         customerBaseUrl: typeof data.customerBaseUrl === "string" ? data.customerBaseUrl : null,
+        timezone:
+          typeof data.timezone === "string" && data.timezone.trim()
+            ? data.timezone.trim()
+            : "America/Denver",
       });
       applyBrandCss(palette);
     } finally {

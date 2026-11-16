@@ -30,6 +30,25 @@ export function formatAddressQuery(parts: {
   return [parts.address, parts.city, parts.state, parts.zip].filter(Boolean).join(", ").trim() || null;
 }
 
+export function addressNeedsGoogleNormalization(parts: {
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+}) {
+  if (!parts.address?.trim()) return false;
+  if (parts.city?.trim() && parts.state?.trim() && parts.zip?.trim()) return false;
+
+  // Do not ask Google to guess from an unqualified street line. A city, state,
+  // or ZIP (including one embedded in a legacy single-field address) is needed.
+  return Boolean(
+    parts.city?.trim() ||
+      parts.state?.trim() ||
+      parts.zip?.trim() ||
+      /\b\d{5}(?:-\d{4})?\b/.test(parts.address)
+  );
+}
+
 /** Prefer an address that includes a street line (avoids POI / city-center guesses). */
 export function pickBestAddressForMap(
   customer: {
@@ -89,7 +108,66 @@ export type GeocodedLocation = {
   lat: number;
   lng: number;
   formattedAddress: string;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  partialMatch: boolean;
 };
+
+type GoogleAddressComponent = {
+  long_name?: string;
+  short_name?: string;
+  types?: string[];
+};
+
+type GoogleGeocodeResult = {
+  formatted_address?: string;
+  partial_match?: boolean;
+  address_components?: GoogleAddressComponent[];
+  geometry?: { location?: { lat?: number; lng?: number } };
+};
+
+function geocodeComponent(components: GoogleAddressComponent[], type: string) {
+  return components.find((component) => component.types?.includes(type));
+}
+
+export function parseGoogleGeocodeResult(
+  result: GoogleGeocodeResult,
+  query: string
+): GeocodedLocation | null {
+  const lat = result.geometry?.location?.lat;
+  const lng = result.geometry?.location?.lng;
+  if (lat == null || lng == null) return null;
+
+  const components = result.address_components ?? [];
+  const streetNumber = geocodeComponent(components, "street_number")?.long_name;
+  const route = geocodeComponent(components, "route")?.long_name;
+  const address =
+    [streetNumber, route].filter(Boolean).join(" ").trim() ||
+    geocodeComponent(components, "premise")?.long_name ||
+    null;
+  const city =
+    geocodeComponent(components, "locality")?.long_name ??
+    geocodeComponent(components, "postal_town")?.long_name ??
+    geocodeComponent(components, "sublocality")?.long_name ??
+    geocodeComponent(components, "administrative_area_level_3")?.long_name ??
+    null;
+  const state =
+    geocodeComponent(components, "administrative_area_level_1")?.short_name ?? null;
+  const zip = geocodeComponent(components, "postal_code")?.long_name ?? null;
+
+  return {
+    lat,
+    lng,
+    formattedAddress: result.formatted_address ?? query,
+    address,
+    city,
+    state,
+    zip,
+    partialMatch: Boolean(result.partial_match),
+  };
+}
 
 export async function geocodeAddress(
   query: string,
@@ -97,6 +175,7 @@ export async function geocodeAddress(
 ): Promise<GeocodedLocation | null> {
   const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
   url.searchParams.set("address", query);
+  url.searchParams.set("region", "us");
   url.searchParams.set("key", apiKey);
 
   const res = await fetch(url.toString(), { cache: "no-store" });
@@ -104,24 +183,11 @@ export async function geocodeAddress(
 
   const data = (await res.json()) as {
     status?: string;
-    results?: Array<{
-      formatted_address?: string;
-      geometry?: { location?: { lat?: number; lng?: number } };
-    }>;
+    results?: GoogleGeocodeResult[];
   };
 
-  if (data.status !== "OK" || !data.results?.[0]?.geometry?.location) {
-    return null;
-  }
-
-  const { lat, lng } = data.results[0].geometry.location;
-  if (lat == null || lng == null) return null;
-
-  return {
-    lat,
-    lng,
-    formattedAddress: data.results[0].formatted_address ?? query,
-  };
+  if (data.status !== "OK" || !data.results?.[0]) return null;
+  return parseGoogleGeocodeResult(data.results[0], query);
 }
 
 export function getGoogleMapsApiKey() {

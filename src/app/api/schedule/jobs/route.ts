@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
         include: visitInclude,
         orderBy: { startAt: "asc" },
       });
-      return NextResponse.json(await serializeVisits(visits));
+      return NextResponse.json(await serializeVisits(visits, { repairAddresses: true }));
     }
 
     const jobs = await listScheduleJobs(user.companyId, start, end, parseFilters(searchParams));

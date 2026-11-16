@@ -14,6 +14,7 @@ import type { CustomerDTO } from "@/lib/customers/types";
 import type { ScheduleSlotClick } from "@/lib/schedule/quick-add";
 import { assignmentOffMessage } from "@/lib/schedule/open-time-slots";
 import type { WorkScheduleDayDTO } from "@/lib/schedule/time-off-types";
+import { localWallDateToUtc } from "@/lib/datetime/zoned";
 
 const selectClassName =
   "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
@@ -28,6 +29,7 @@ type Props = {
     members?: { userId?: string; user: { id: string } }[];
   }[];
   workSchedules?: Record<string, WorkScheduleDayDTO[]>;
+  companyTimezone: string;
   onClose: () => void;
   onCreated: (visitId: string) => void;
 };
@@ -48,6 +50,7 @@ export function ScheduleQuickAddDialog({
   employees,
   crews = [],
   workSchedules,
+  companyTimezone,
   onClose,
   onCreated,
 }: Props) {
@@ -141,6 +144,8 @@ export function ScheduleQuickAddDialog({
     setSaving(true);
     try {
       const isTimeOff = bookingKind === "TIME_OFF";
+      const savedStartAt = localWallDateToUtc(slot.startAt, companyTimezone);
+      const savedEndAt = localWallDateToUtc(slot.endAt, companyTimezone);
       const res = await fetch(isTimeOff ? "/api/schedule/time-off" : "/api/schedule/jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -148,8 +153,8 @@ export function ScheduleQuickAddDialog({
           isTimeOff
             ? {
                 userIds: assignedUserIds,
-                startAt: slot.startAt.toISOString(),
-                endAt: slot.endAt.toISOString(),
+                startAt: savedStartAt.toISOString(),
+                endAt: savedEndAt.toISOString(),
                 allDay: false,
                 type: timeOffType,
                 reason: timeOffReason.trim() || undefined,
@@ -157,8 +162,8 @@ export function ScheduleQuickAddDialog({
               }
             : {
                 title: title.trim() || "Service visit",
-                startAt: slot.startAt.toISOString(),
-                endAt: slot.endAt.toISOString(),
+                startAt: savedStartAt.toISOString(),
+                endAt: savedEndAt.toISOString(),
                 division,
                 assignedUserIds: assignedUserIds.length ? assignedUserIds : undefined,
                 crewId: crewId || undefined,
