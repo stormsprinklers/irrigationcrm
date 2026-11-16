@@ -584,6 +584,39 @@ async function ensureCustomerTrackingData() {
   console.log("Ensured customer and lead tracking data columns");
 }
 
+async function backfillPipelineLeadAttribution() {
+  const updated = await prisma.$executeRawUnsafe(`
+    UPDATE "Customer" SET
+      "pipelineLeadSource" = CASE "attributionChannel"
+        WHEN 'google_ads' THEN 'Google Ads'
+        WHEN 'google_lsa' THEN 'Google LSA'
+        WHEN 'meta_ads' THEN 'Meta Ads'
+        WHEN 'meta' THEN 'Meta'
+        WHEN 'organic' THEN 'Organic'
+        WHEN 'referral' THEN 'Referral'
+        WHEN 'gbp' THEN 'Google Business Profile'
+        WHEN 'other_paid' THEN 'Other paid'
+      END
+    WHERE "pipelineLeadAt" IS NOT NULL
+      AND "givingProgramOnly" = false
+      AND "attributionChannel" IN (
+        'google_ads', 'google_lsa', 'meta_ads', 'meta',
+        'organic', 'referral', 'gbp', 'other_paid'
+      )
+      AND "pipelineLeadSource" IS DISTINCT FROM CASE "attributionChannel"
+        WHEN 'google_ads' THEN 'Google Ads'
+        WHEN 'google_lsa' THEN 'Google LSA'
+        WHEN 'meta_ads' THEN 'Meta Ads'
+        WHEN 'meta' THEN 'Meta'
+        WHEN 'organic' THEN 'Organic'
+        WHEN 'referral' THEN 'Referral'
+        WHEN 'gbp' THEN 'Google Business Profile'
+        WHEN 'other_paid' THEN 'Other paid'
+      END
+  `);
+  console.log(`Backfilled first-touch pipeline attribution (${updated} customers updated)`);
+}
+
 async function ensurePipelineConversionDelivery() {
   const companyColumns = [
     "googleAdsPipelineLeadActionId",
@@ -1096,6 +1129,7 @@ async function main() {
   await ensureMarketerRole();
   await ensureSalesPipeline();
   await ensureCustomerTrackingData();
+  await backfillPipelineLeadAttribution();
   await ensurePipelineConversionDelivery();
   await ensurePipelineFollowUps();
   await ensureMessageReadReceipts();

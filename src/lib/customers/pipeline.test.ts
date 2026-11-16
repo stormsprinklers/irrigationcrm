@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   newlyReachedPipelineStages,
   pipelineAdvanceData,
+  pipelineLeadSourceFromAttribution,
   pipelineSpeedSeconds,
 } from "./pipeline";
 
@@ -30,6 +31,40 @@ test("entering at a later stage fills every prior stage timestamp", () => {
   assert.equal(update?.pipelineConvertedAt, at);
   assert.equal(update?.pipelineSoldAt, null);
   assert.equal(update?.pipelineLeadSource, "Google Ads");
+});
+
+test("pipeline source prefers first-touch ad attribution over the submitted form", () => {
+  assert.equal(
+    pipelineLeadSourceFromAttribution({
+      source: "christmas-estimate",
+      attributionChannel: "google_ads",
+    }),
+    "Google Ads"
+  );
+  assert.equal(
+    pipelineLeadSourceFromAttribution({
+      source: "meta_temporary_lights",
+      attributionChannel: "meta_ads",
+    }),
+    "Meta Ads"
+  );
+});
+
+test("direct or unknown attribution preserves a meaningful contact source", () => {
+  assert.equal(
+    pipelineLeadSourceFromAttribution({
+      source: "Phone call",
+      attributionChannel: "direct",
+    }),
+    "Phone call"
+  );
+  assert.equal(
+    pipelineLeadSourceFromAttribution({
+      source: "SMS",
+      attributionChannel: "unknown",
+    }),
+    "SMS"
+  );
 });
 
 test("pipeline stages never regress or restart after sold", () => {

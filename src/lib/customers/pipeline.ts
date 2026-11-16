@@ -1,5 +1,6 @@
 import { LeadStatus, Prisma, SalesPipelineStage } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { attributionChannelLabel } from "@/lib/attribution/normalize";
 import { buildPipelineIdentitySnapshot } from "@/lib/marketing/pipeline-conversion-identifiers";
 import { isGivingLeadSource } from "@/lib/leads/categories";
 
@@ -38,6 +39,23 @@ type AdvanceInput = {
 };
 
 const TRACKED_STAGES: AdvanceInput["stage"][] = ["LEAD", "QUALIFIED", "CONVERTED", "SOLD"];
+
+/**
+ * Prefer an immutable first-touch marketing channel over the form or contact
+ * method. Direct/unknown attribution is intentionally not stronger than a
+ * useful source such as Phone call, SMS, LinkedIn, or the submitted form name.
+ */
+export function pipelineLeadSourceFromAttribution(lead: {
+  source: string | null;
+  attributionChannel?: string | null;
+}) {
+  const source = lead.source?.trim() || null;
+  const channel = lead.attributionChannel?.trim() || null;
+  if (!channel || channel === "direct" || channel === "unknown") return source;
+
+  const label = attributionChannelLabel(channel);
+  return label === "Unknown" ? source : label;
+}
 
 function googleEventSource(leadSource: string | null | undefined) {
   const normalized = leadSource?.trim().toLowerCase() ?? "";
@@ -187,6 +205,7 @@ export async function addCustomerToPipelineFromLead(params: {
     id: string;
     status: LeadStatus;
     source: string | null;
+    attributionChannel?: string | null;
     createdAt: Date;
     contactedAt: Date | null;
   };
@@ -197,7 +216,7 @@ export async function addCustomerToPipelineFromLead(params: {
     customerId: params.customerId,
     stage: params.lead.status === LeadStatus.QUALIFIED ? "QUALIFIED" : "LEAD",
     occurredAt: params.lead.createdAt,
-    leadSource: params.lead.source,
+    leadSource: pipelineLeadSourceFromAttribution(params.lead),
     firstContactedAt: params.lead.contactedAt,
     leadId: params.lead.id,
   });
