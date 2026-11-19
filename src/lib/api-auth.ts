@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { verifyMobileAccessToken } from "@/lib/mobile-auth/tokens";
+import { effectiveSessionRole, hasValidAdminPreview } from "@/lib/auth/effective-role";
 
 export type SessionUser = {
   id: string;
@@ -67,13 +68,37 @@ export async function getSessionUser(request?: Request): Promise<SessionUser | n
   if (bearer) return userFromBearerToken(bearer);
   const session = await auth();
   if (session?.user?.id && session.user.companyId) {
+    const current = await prisma.user.findFirst({
+      where: {
+        id: session.user.id,
+        companyId: session.user.companyId,
+        status: "ACTIVE",
+        systemKind: null,
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        companyId: true,
+        role: true,
+      },
+    });
+    if (!current) return null;
+    const previewing = hasValidAdminPreview({
+      tokenTrueRole: session.user.trueRole,
+      currentRole: current.role,
+    });
     return {
-      id: session.user.id,
-      email: session.user.email,
-      name: session.user.name,
-      companyId: session.user.companyId,
-      role: session.user.role,
-      ...(session.user.trueRole ? { trueRole: session.user.trueRole } : {}),
+      id: current.id,
+      email: current.email,
+      name: current.name,
+      companyId: current.companyId,
+      role: effectiveSessionRole({
+        tokenRole: session.user.role,
+        tokenTrueRole: session.user.trueRole,
+        currentRole: current.role,
+      }),
+      ...(previewing ? { trueRole: "ADMIN" } : {}),
     };
   }
 

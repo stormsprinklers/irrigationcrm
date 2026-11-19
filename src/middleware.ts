@@ -5,6 +5,8 @@ import { PORTAL_SESSION_COOKIE } from "@/lib/portal/constants";
 import { enforceBrowserMutationOrigin } from "@/lib/security/csrf";
 import { affiliatePathAllowed } from "@/lib/affiliate/access";
 import { bulbPrepPathAllowed } from "@/lib/bulb-prep/access";
+import { effectiveSessionRole } from "@/lib/auth/effective-role";
+import { prisma } from "@/lib/prisma";
 
 const publicPaths = [
   "/",
@@ -93,10 +95,6 @@ export async function middleware(request: NextRequest) {
     (path) => pathname === path || pathname.startsWith(`${path}/`)
   );
 
-  if (isPublic) {
-    return withNoIndex(NextResponse.next());
-  }
-
   const token = await getToken({
     req: request,
     secret: authSecret,
@@ -104,6 +102,9 @@ export async function middleware(request: NextRequest) {
   });
 
   if (!token) {
+    if (isPublic) {
+      return withNoIndex(NextResponse.next());
+    }
     const bearerAuth = request.headers.get("authorization")?.startsWith("Bearer ");
     if (bearerAuth && pathname.startsWith("/api/")) {
       return withNoIndex(NextResponse.next());
@@ -121,19 +122,38 @@ export async function middleware(request: NextRequest) {
     return withNoIndex(NextResponse.redirect(loginUrl));
   }
 
-  // Affiliates are intentionally isolated from the staff CRM. Enforce the
-  // boundary here as well as in route handlers so guessing a URL cannot expose
-  // phone records, settings, customer profiles, or other company data.
-  if (token.role === "AFFILIATE") {
-    if (pathname.startsWith("/api/") && !affiliatePathAllowed(pathname)) {
-      return withNoIndex(NextResponse.json({ error: "Forbidden" }, { status: 403 }));
+  const tokenId = typeof token.id === "string" ? token.id : "";
+  const tokenCompanyId = typeof token.companyId === "string" ? token.companyId : "";
+  const currentAccount = tokenId && tokenCompanyId
+    ? await prisma.user.findFirst({
+        where: {
+          id: tokenId,
+          companyId: tokenCompanyId,
+          status: "ACTIVE",
+          systemKind: null,
+        },
+        select: { role: true },
+      })
+    : null;
+
+  if (!currentAccount) {
+    if (isPublic) return withNoIndex(NextResponse.next());
+    if (pathname.startsWith("/api/")) {
+      return withNoIndex(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
     }
-    if (!pathname.startsWith("/api/") && !affiliatePathAllowed(pathname)) {
-      return withNoIndex(NextResponse.redirect(new URL("/affiliate", request.url)));
-    }
+    return withNoIndex(NextResponse.redirect(new URL("/login", request.url)));
   }
 
-  if (token.role === "BULB_PREP") {
+  const role = effectiveSessionRole({
+    tokenRole: typeof token.role === "string" ? token.role : currentAccount.role,
+    tokenTrueRole: typeof token.trueRole === "string" ? token.trueRole : undefined,
+    currentRole: currentAccount.role,
+  });
+
+  // Apply this before the general public-path bypass. A signed-in Bulb Prep
+  // employee must not reach webhook/integration APIs just because those routes
+  // also accept unauthenticated provider traffic.
+  if (role === "BULB_PREP") {
     if (pathname.startsWith("/api/") && !bulbPrepPathAllowed(pathname)) {
       return withNoIndex(NextResponse.json({ error: "Forbidden" }, { status: 403 }));
     }
@@ -142,8 +162,26 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  if (isPublic) {
+    return withNoIndex(NextResponse.next());
+  }
+
+  // Affiliates are intentionally isolated from the staff CRM. Enforce the
+  // boundary here as well as in route handlers so guessing a URL cannot expose
+  // phone records, settings, customer profiles, or other company data.
+  if (role === "AFFILIATE") {
+    if (pathname.startsWith("/api/") && !affiliatePathAllowed(pathname)) {
+      return withNoIndex(NextResponse.json({ error: "Forbidden" }, { status: 403 }));
+    }
+    if (!pathname.startsWith("/api/") && !affiliatePathAllowed(pathname)) {
+      return withNoIndex(NextResponse.redirect(new URL("/affiliate", request.url)));
+    }
+  }
+
   return withNoIndex(NextResponse.next());
 }
+
+export const runtime = "nodejs";
 
 export const config = {
   matcher: [

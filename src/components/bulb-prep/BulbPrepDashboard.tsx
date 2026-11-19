@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, CheckCircle2, ChevronDown, CircleDot, MapPin } from "lucide-react";
+import { CalendarDays, CheckCircle2, CircleDot } from "lucide-react";
 import { toast } from "sonner";
 import { ClockInOutButton } from "@/components/home/ClockInOutButton";
 import { ContentArea } from "@/components/layout/ContentArea";
@@ -12,19 +12,16 @@ import { cn } from "@/lib/utils";
 
 type BulbPrepJob = {
   id: string;
-  title: string;
   customerName: string;
-  city: string;
-  startAt: string;
   dateLabel: string;
   timeLabel: string;
-  bulbColor: string;
   strandColor: string;
-  linearFeet: number | null;
-  notes: string[];
+  requirements: Array<{
+    bulbType: string;
+    bulbColor: string;
+    linearFeet: number | null;
+  }>;
   completed: boolean;
-  completedAt: string | null;
-  completedBy: string | null;
 };
 
 export function BulbPrepDashboard({ name }: { name: string }) {
@@ -32,7 +29,6 @@ export function BulbPrepDashboard({ name }: { name: string }) {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [windowDays, setWindowDays] = useState(90);
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
 
   const load = useCallback(async () => {
     try {
@@ -75,8 +71,6 @@ export function BulbPrepDashboard({ name }: { name: string }) {
             ? {
                 ...item,
                 completed: Boolean(data.completed),
-                completedAt: data.completedAt ?? null,
-                completedBy: data.completedBy ?? null,
               }
             : item
         )
@@ -87,15 +81,6 @@ export function BulbPrepDashboard({ name }: { name: string }) {
     } finally {
       setBusyId(null);
     }
-  }
-
-  function toggleNotes(jobId: string) {
-    setExpandedIds((current) => {
-      const next = new Set(current);
-      if (next.has(jobId)) next.delete(jobId);
-      else next.add(jobId);
-      return next;
-    });
   }
 
   return (
@@ -169,69 +154,41 @@ export function BulbPrepDashboard({ name }: { name: string }) {
                         <p className={cn("font-semibold", job.completed && "text-muted-foreground line-through")}>
                           {job.customerName}
                         </p>
-                        <p className="mt-0.5 flex items-center gap-1 text-sm text-muted-foreground">
-                          <MapPin className="h-3.5 w-3.5" />
-                          {job.city}
-                        </p>
                       </div>
                       <Badge variant={job.completed ? "success" : "outline"}>
                         {job.dateLabel} · {job.timeLabel}
                       </Badge>
                     </div>
 
-                    <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
-                      <div className="rounded-md bg-background/80 px-3 py-2">
-                        <span className="block text-xs text-muted-foreground">Bulb color</span>
-                        <span className="font-medium">{job.bulbColor}</span>
+                    <div className="mt-3 overflow-hidden rounded-md border bg-background/80 text-sm">
+                      <div className="grid grid-cols-[1fr_1fr_auto] gap-3 border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
+                        <span>Bulb type</span>
+                        <span>Bulb color</span>
+                        <span>Length</span>
                       </div>
-                      <div className="rounded-md bg-background/80 px-3 py-2">
-                        <span className="block text-xs text-muted-foreground">Strand color</span>
-                        <span className="font-medium">{job.strandColor}</span>
-                      </div>
-                      <div className="rounded-md bg-background/80 px-3 py-2">
-                        <span className="block text-xs text-muted-foreground">Linear feet</span>
-                        <span className="font-medium">
-                          {job.linearFeet == null ? "Not specified" : `${job.linearFeet.toLocaleString()} ft`}
-                        </span>
-                      </div>
-                    </div>
-
-                    {job.notes.length ? (
-                      <div className="mt-3 border-t pt-3">
-                        <button
-                          type="button"
-                          className="flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-                          aria-expanded={expandedIds.has(job.id)}
-                          aria-controls={`bulb-prep-notes-${job.id}`}
-                          onClick={() => toggleNotes(job.id)}
+                      {job.requirements.map((requirement, index) => (
+                        <div
+                          key={`${requirement.bulbType}-${requirement.bulbColor}-${index}`}
+                          className="grid grid-cols-[1fr_1fr_auto] gap-3 border-b px-3 py-2 last:border-b-0"
                         >
-                          <ChevronDown
-                            className={cn(
-                              "h-4 w-4 transition-transform",
-                              expandedIds.has(job.id) && "rotate-180"
-                            )}
-                          />
-                          {expandedIds.has(job.id) ? "Hide job notes" : `Job notes (${job.notes.length})`}
-                        </button>
-                        {expandedIds.has(job.id) ? (
-                          <div
-                            id={`bulb-prep-notes-${job.id}`}
-                            className="mt-2 space-y-2 rounded-md bg-background/80 p-3 text-sm"
-                          >
-                            {job.notes.map((note, index) => (
-                              <p key={`${job.id}-note-${index}`} className="whitespace-pre-wrap">
-                                {note}
-                              </p>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
+                          <span className="font-medium">{requirement.bulbType}</span>
+                          <span>{requirement.bulbColor}</span>
+                          <span className="tabular-nums">
+                            {requirement.linearFeet == null
+                              ? "—"
+                              : `${requirement.linearFeet.toLocaleString()} ft`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Strand color: <span className="font-medium text-foreground">{job.strandColor}</span>
+                    </p>
 
                     {job.completed ? (
                       <p className="mt-2 flex items-center gap-1 text-xs text-green-700 dark:text-green-400">
                         <CheckCircle2 className="h-3.5 w-3.5" />
-                        Ready{job.completedBy ? ` · checked by ${job.completedBy}` : ""}
+                        Ready
                       </p>
                     ) : (
                       <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">

@@ -14,6 +14,7 @@ import {
 import { holidayVisitJobSummary, holidayVisitPlan } from "@/lib/holiday-lighting/visit-plan";
 import { prisma } from "@/lib/prisma";
 import { writeStaffAuditLog } from "@/lib/audit/staff-audit";
+import { buildBulbPrepRequirements } from "@/lib/bulb-prep/requirements";
 
 function canUseBulbPrepDashboard(role: string) {
   return role === UserRole.BULB_PREP;
@@ -23,16 +24,6 @@ function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
-}
-
-function uniqueJobNotes(values: Array<string | null | undefined>) {
-  const seen = new Set<string>();
-  return values.flatMap((value) => {
-    const note = value?.trim();
-    if (!note || seen.has(note)) return [];
-    seen.add(note);
-    return [note];
-  });
 }
 
 export async function GET() {
@@ -64,20 +55,11 @@ export async function GET() {
       orderBy: [{ startAt: "asc" }, { customer: { name: "asc" } }],
       select: {
         id: true,
-        title: true,
         startAt: true,
-        city: true,
-        workSummary: true,
         designExportMetadata: true,
         bulbPrepCompletedAt: true,
-        bulbPrepCompletedBy: { select: { name: true } },
-        customer: { select: { name: true, city: true } },
-        property: { select: { city: true } },
+        customer: { select: { name: true } },
         lineItems: { select: { name: true, description: true } },
-        notes: {
-          orderBy: { createdAt: "asc" },
-          select: { body: true },
-        },
       },
     });
 
@@ -94,12 +76,11 @@ export async function GET() {
         visit.designExportMetadata,
         visit.lineItems
       );
+      const bulbColor = specs?.colorLabel ?? "Not specified";
+      const linearFeet = specs?.totalFeet ?? null;
       return {
         id: visit.id,
-        title: visit.title,
-        customerName: visit.customer?.name ?? visit.title,
-        city: visit.property?.city ?? visit.city ?? visit.customer?.city ?? "City not listed",
-        startAt: visit.startAt.toISOString(),
+        customerName: visit.customer?.name ?? "Holiday lighting job",
         dateLabel: formatInTimezone(visit.startAt, timeZone, {
           weekday: "short",
           month: "short",
@@ -109,25 +90,15 @@ export async function GET() {
           hour: "numeric",
           minute: "2-digit",
         }),
-        bulbColor: specs?.colorLabel ?? "Not specified",
         strandColor: specs?.strandColor ?? "Not specified",
-        linearFeet: specs?.totalFeet ?? null,
-        notes: uniqueJobNotes([
-          visit.workSummary,
-          typeof plan?.notes === "string" ? plan.notes : null,
-          ...visit.notes.map((note) => note.body),
-        ]),
+        requirements: buildBulbPrepRequirements(plan, { bulbColor, linearFeet }),
         completed: Boolean(visit.bulbPrepCompletedAt),
-        completedAt: visit.bulbPrepCompletedAt?.toISOString() ?? null,
-        completedBy: visit.bulbPrepCompletedBy?.name ?? null,
       };
     });
 
     return NextResponse.json({
       jobs,
-      timeZone,
       windowDays: 90,
-      completedCount: jobs.filter((job) => job.completed).length,
     });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
@@ -176,7 +147,6 @@ export async function PATCH(request: NextRequest) {
       },
       select: {
         bulbPrepCompletedAt: true,
-        bulbPrepCompletedBy: { select: { name: true } },
       },
     });
 
@@ -197,8 +167,6 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({
       id: visit.id,
       completed: Boolean(updated.bulbPrepCompletedAt),
-      completedAt: updated.bulbPrepCompletedAt?.toISOString() ?? null,
-      completedBy: updated.bulbPrepCompletedBy?.name ?? null,
     });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
