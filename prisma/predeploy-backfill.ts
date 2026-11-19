@@ -99,6 +99,16 @@ async function ensureVehicleNumberColumn() {
   console.log(`Ensured "Vehicle"."vehicleNumber" column and company unique index`);
 }
 
+async function ensureVehicleInventoryColumns() {
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "Vehicle" ADD COLUMN IF NOT EXISTS "assetType" TEXT NOT NULL DEFAULT 'VEHICLE'`
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "Vehicle" ADD COLUMN IF NOT EXISTS "estimatedValueCents" INTEGER`
+  );
+  console.log(`Ensured vehicle/equipment inventory type and estimated value columns`);
+}
+
 async function ensureEstimateVslSettings() {
   await prisma.$executeRawUnsafe(
     `ALTER TABLE "Company" ADD COLUMN IF NOT EXISTS "estimateVslEnabled" BOOLEAN NOT NULL DEFAULT false`
@@ -1166,6 +1176,11 @@ async function main() {
     await ensureVehicleNumberColumn();
   } catch (err) {
     console.warn("Vehicle number column ensure skipped:", err);
+  }
+  try {
+    await ensureVehicleInventoryColumns();
+  } catch (err) {
+    console.warn("Vehicle inventory columns ensure skipped:", err);
   }
   try {
     await backfillLeadPhotoAttachments();

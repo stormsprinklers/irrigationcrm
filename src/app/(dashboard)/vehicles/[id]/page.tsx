@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import { isOilOverdue, oilStatusLabel } from "@/lib/vehicles/oil";
 import { assigneeLabel, vehicleDisplayName } from "@/lib/vehicles/types";
+import { formatEstimatedValue, type AssetType } from "@/lib/vehicles/inventory";
 import { cn } from "@/lib/utils";
 
 type Employee = { id: string; name: string };
@@ -68,6 +69,7 @@ type Issue = {
 
 type Vehicle = {
   id: string;
+  assetType: AssetType;
   vehicleNumber: string | null;
   make: string;
   model: string;
@@ -78,6 +80,7 @@ type Vehicle = {
   assignedUserId: string | null;
   status: "ACTIVE" | "SOLD" | "OUT_OF_SERVICE";
   currentMileage: number;
+  estimatedValueCents: number | null;
   lastOilChangeAt: string | null;
   lastOilChangeMileage: number | null;
   oilIntervalMiles: number;
@@ -239,6 +242,8 @@ export default function VehicleDetailPage() {
   const [attachmentKindFilter, setAttachmentKindFilter] = useState("ALL");
 
   const [editVehicleNumber, setEditVehicleNumber] = useState("");
+  const [editAssetType, setEditAssetType] = useState<AssetType>("VEHICLE");
+  const [editEstimatedValue, setEditEstimatedValue] = useState("");
   const [editMake, setEditMake] = useState("");
   const [editModel, setEditModel] = useState("");
   const [editYear, setEditYear] = useState("");
@@ -266,6 +271,8 @@ export default function VehicleDetailPage() {
 
   const syncForm = useCallback((v: Vehicle) => {
     setEditVehicleNumber(v.vehicleNumber ?? "");
+    setEditAssetType(v.assetType);
+    setEditEstimatedValue(v.estimatedValueCents == null ? "" : (v.estimatedValueCents / 100).toFixed(2));
     setEditMake(v.make);
     setEditModel(v.model);
     setEditYear(String(v.year));
@@ -351,6 +358,8 @@ export default function VehicleDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           vehicleNumber: editVehicleNumber || null,
+          assetType: editAssetType,
+          estimatedValue: editEstimatedValue || null,
           make: editMake,
           model: editModel,
           year: Number(editYear),
@@ -375,7 +384,7 @@ export default function VehicleDetailPage() {
         setEditNotes(data.notes ?? "");
         setVehicle((prev) => (prev ? { ...prev, notes: data.notes ?? null } : prev));
       }
-      toast.success("Vehicle updated");
+      toast.success(editAssetType === "EQUIPMENT" ? "Equipment updated" : "Vehicle updated");
       await load({ quiet: true });
     } finally {
       setSaving(false);
@@ -539,14 +548,14 @@ export default function VehicleDetailPage() {
   }
 
   async function deleteVehicle() {
-    if (!canManage) return;
-    if (!confirm("Delete this vehicle and all related records?")) return;
+    if (!canManage || !vehicle) return;
+    if (!confirm(`Delete this ${vehicle.assetType === "EQUIPMENT" ? "equipment item" : "vehicle"} and all related records?`)) return;
     const res = await fetch(`/api/vehicles/${id}`, { method: "DELETE" });
     if (!res.ok) {
       toast.error("Failed to delete");
       return;
     }
-    toast.success("Vehicle deleted");
+    toast.success(vehicle.assetType === "EQUIPMENT" ? "Equipment deleted" : "Vehicle deleted");
     router.push("/vehicles");
   }
 
@@ -619,7 +628,7 @@ export default function VehicleDetailPage() {
         </div>
 
         <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-lg border border-border p-3">
               <div className="text-xs text-muted-foreground">Mileage</div>
               <div className="text-lg font-semibold">
@@ -636,6 +645,10 @@ export default function VehicleDetailPage() {
               >
                 {oilLabel}
               </div>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <div className="text-xs text-muted-foreground">Estimated value</div>
+              <div className="text-lg font-semibold">{formatEstimatedValue(vehicle.estimatedValueCents)}</div>
             </div>
             <div className="rounded-lg border border-border p-3">
               <div className="text-xs text-muted-foreground">Open issues</div>
@@ -679,7 +692,29 @@ export default function VehicleDetailPage() {
           >
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Vehicle number</label>
+              <label className="text-sm font-medium">Inventory type</label>
+              <select
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={editAssetType}
+                onChange={(event) => setEditAssetType(event.target.value as AssetType)}
+              >
+                <option value="VEHICLE">Vehicle</option>
+                <option value="EQUIPMENT">Equipment</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Estimated cash value</label>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={editEstimatedValue}
+                onChange={(event) => setEditEstimatedValue(event.target.value)}
+                placeholder="0.00"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Inventory number</label>
               <Input
                 value={editVehicleNumber}
                 onChange={(e) => setEditVehicleNumber(e.target.value)}
@@ -757,7 +792,15 @@ export default function VehicleDetailPage() {
         <Section title="Profile">
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
             <div>
-              <dt className="text-muted-foreground">Vehicle number</dt>
+              <dt className="text-muted-foreground">Inventory type</dt>
+              <dd>{vehicle.assetType === "EQUIPMENT" ? "Equipment" : "Vehicle"}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Estimated value</dt>
+              <dd>{formatEstimatedValue(vehicle.estimatedValueCents)}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Inventory number</dt>
               <dd>{vehicle.vehicleNumber || "—"}</dd>
             </div>
             <div>

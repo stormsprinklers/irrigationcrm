@@ -1,7 +1,7 @@
 "use client";
 
 import type { Prisma } from "@prisma/client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { HolidayStrandMapViewer } from "@/components/holiday-lighting/HolidayStrandMapViewer";
 import {
@@ -11,6 +11,16 @@ import {
 import { blobProxyUrl } from "@/lib/blob/urls";
 import { holidayVisitJobSummary, holidayVisitPlan } from "@/lib/holiday-lighting/visit-plan";
 import { HOLIDAY_COLOR_PATTERNS, HOLIDAY_STRAND_COLORS } from "@/lib/holiday-lighting/types";
+
+const CUSTOM_COLOR_SAVE_DELAY_MS = 700;
+
+function colorChoice(value: string) {
+  return HOLIDAY_COLOR_PATTERNS.includes(
+    value as (typeof HOLIDAY_COLOR_PATTERNS)[number]
+  ) && value !== "Other"
+    ? value
+    : "Other";
+}
 
 type SummaryLineItem = {
   name: string;
@@ -64,16 +74,29 @@ export function HolidayLightingPlanSection({
   const jobSummary = holidayVisitJobSummary(selectedMetadata, lineItems);
   const summaryColor = jobSummary?.colors[0] ?? "";
   const [strandColor, setStrandColor] = useState(jobSummary?.strandColor ?? "");
-  const [colorPattern, setColorPattern] = useState(summaryColor);
+  const [selectedColor, setSelectedColor] = useState(() => colorChoice(summaryColor));
+  const [customColorPattern, setCustomColorPattern] = useState(() =>
+    colorChoice(summaryColor) === "Other" ? summaryColor : ""
+  );
   const [savingSpecs, setSavingSpecs] = useState(false);
-  const isKnownColor = HOLIDAY_COLOR_PATTERNS.includes(
-    colorPattern as (typeof HOLIDAY_COLOR_PATTERNS)[number]
-  ) && colorPattern !== "Other";
+  const customColorFocused = useRef(false);
+  const customSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastRequestedCustomColor = useRef("");
+  const customSaveInFlight = useRef(false);
+  const pendingCustomColor = useRef<string | null>(null);
 
   useEffect(() => {
     setStrandColor(jobSummary?.strandColor ?? "");
-    setColorPattern(summaryColor);
+    if (customColorFocused.current) return;
+    const nextChoice = colorChoice(summaryColor);
+    setSelectedColor(nextChoice);
+    setCustomColorPattern(nextChoice === "Other" ? summaryColor : "");
+    lastRequestedCustomColor.current = nextChoice === "Other" ? summaryColor.trim() : "";
   }, [jobSummary?.strandColor, summaryColor]);
+
+  useEffect(() => () => {
+    if (customSaveTimer.current) clearTimeout(customSaveTimer.current);
+  }, []);
 
   async function saveSpecs(next: { strandColor?: string; colorPattern?: string }) {
     const endpoint = visitId
@@ -81,7 +104,7 @@ export function HolidayLightingPlanSection({
       : estimateId && estimateOptionId
         ? `/api/estimates/${estimateId}/holiday-lighting-specs`
         : null;
-    if (!endpoint || !editable) return;
+    if (!endpoint || !editable) return false;
     setSavingSpecs(true);
     try {
       const response = await fetch(endpoint, {
@@ -96,11 +119,49 @@ export function HolidayLightingPlanSection({
       if (!response.ok) throw new Error(data.error ?? "Could not update lighting specs");
       if (data.designExportMetadata) onMetadataUpdated?.(data.designExportMetadata);
       toast.success("Lighting specs updated");
+      return true;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not update lighting specs");
+      return false;
     } finally {
       setSavingSpecs(false);
     }
+  }
+
+  function requestCustomColorSave(value: string) {
+    const next = value.trim();
+    if (!next || /^other$/i.test(next)) return;
+    if (customSaveInFlight.current) {
+      if (next !== lastRequestedCustomColor.current) pendingCustomColor.current = next;
+      return;
+    }
+    if (next === lastRequestedCustomColor.current) return;
+
+    customSaveInFlight.current = true;
+    void (async () => {
+      let candidate: string | null = next;
+      while (candidate) {
+        lastRequestedCustomColor.current = candidate;
+        const saved = await saveSpecs({ colorPattern: candidate });
+        if (!saved && lastRequestedCustomColor.current === candidate) {
+          lastRequestedCustomColor.current = "";
+        }
+        const queued = pendingCustomColor.current;
+        pendingCustomColor.current = null;
+        candidate = queued && queued !== candidate ? queued : null;
+      }
+      customSaveInFlight.current = false;
+    })();
+  }
+
+  function scheduleCustomColorSave(value: string) {
+    if (customSaveTimer.current) clearTimeout(customSaveTimer.current);
+    const next = value.trim();
+    if (!next || /^other$/i.test(next)) return;
+    customSaveTimer.current = setTimeout(() => {
+      customSaveTimer.current = null;
+      requestCustomColorSave(next);
+    }, CUSTOM_COLOR_SAVE_DELAY_MS);
   }
   const bulbTypes = [
     ...new Set(strandMap?.features.map((feature) => feature.lightStyleLabel) ?? []),
@@ -189,26 +250,46 @@ export function HolidayLightingPlanSection({
                 Light color / pattern
                 <select
                   className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-normal"
-                  value={isKnownColor ? colorPattern : "Other"}
+                  value={selectedColor}
                   disabled={savingSpecs}
                   onChange={(event) => {
                     const value = event.target.value;
-                    setColorPattern(value);
-                    if (value !== "Other") void saveSpecs({ colorPattern: value });
+                    if (customSaveTimer.current) clearTimeout(customSaveTimer.current);
+                    setSelectedColor(value);
+                    if (value === "Other") {
+                      setCustomColorPattern("");
+                      lastRequestedCustomColor.current = "";
+                      pendingCustomColor.current = null;
+                    } else {
+                      setCustomColorPattern("");
+                      pendingCustomColor.current = null;
+                      void saveSpecs({ colorPattern: value });
+                    }
                   }}
                 >
                   {HOLIDAY_COLOR_PATTERNS.map((color) => <option key={color} value={color}>{color}</option>)}
                 </select>
-                {!isKnownColor ? (
+                {selectedColor === "Other" ? (
                   <input
                     className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-normal"
-                    value={colorPattern === "Other" ? "" : colorPattern}
-                    disabled={savingSpecs}
+                    value={customColorPattern}
                     placeholder="Describe the custom color or pattern"
-                    onChange={(event) => setColorPattern(event.target.value || "Other")}
+                    onFocus={() => {
+                      customColorFocused.current = true;
+                    }}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setCustomColorPattern(value);
+                      scheduleCustomColorSave(value);
+                    }}
                     onBlur={(event) => {
+                      customColorFocused.current = false;
+                      if (customSaveTimer.current) {
+                        clearTimeout(customSaveTimer.current);
+                        customSaveTimer.current = null;
+                      }
                       const value = event.currentTarget.value.trim();
-                      if (value) void saveSpecs({ colorPattern: value });
+                      if (value) requestCustomColorSave(value);
                     }}
                   />
                 ) : null}

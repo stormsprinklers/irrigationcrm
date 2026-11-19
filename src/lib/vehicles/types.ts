@@ -24,6 +24,7 @@ export type VehicleAssignee = {
 export type VehicleListItem = Pick<
   Vehicle,
   | "id"
+  | "assetType"
   | "vehicleNumber"
   | "make"
   | "model"
@@ -34,6 +35,7 @@ export type VehicleListItem = Pick<
   | "assignedUserId"
   | "status"
   | "currentMileage"
+  | "estimatedValueCents"
   | "nextOilChangeDueAt"
   | "nextOilChangeDueMileage"
   | "lastOilChangeAt"

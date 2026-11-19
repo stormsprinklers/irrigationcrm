@@ -8,6 +8,7 @@ import {
 } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { computeOilDue } from "@/lib/vehicles/oil";
+import { isAssetType, parseEstimatedValueCents } from "@/lib/vehicles/inventory";
 import { canManageVehicles, canViewVehicles } from "@/lib/vehicles/permissions";
 import { getVehicleDetail } from "@/lib/vehicles/queries";
 import {
@@ -49,6 +50,16 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     const body = await request.json();
     const data: Record<string, unknown> = {};
+
+    if (body.assetType !== undefined) {
+      if (!isAssetType(body.assetType)) return badRequestResponse("Invalid inventory type");
+      data.assetType = body.assetType;
+    }
+    if (body.estimatedValue !== undefined) {
+      const estimatedValue = parseEstimatedValueCents(body.estimatedValue);
+      if (estimatedValue.error) return badRequestResponse(estimatedValue.error);
+      data.estimatedValueCents = estimatedValue.value;
+    }
 
     if (body.vehicleNumber !== undefined) {
       const vehicleNumberError = vehicleNumberValidationError(body.vehicleNumber);

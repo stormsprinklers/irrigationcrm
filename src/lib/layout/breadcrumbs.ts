@@ -181,8 +181,8 @@ const BREADCRUMB_ROOT: Record<string, BreadcrumbNode> = kids({
     Setup: node("/hiring/setup"),
   })),
   Vehicles: node("/vehicles", kids({
-    Fleet: node("/vehicles"),
-    "Add vehicle": node("/vehicles/new"),
+    Inventory: node("/vehicles"),
+    "Add vehicle or equipment": node("/vehicles/new"),
   })),
   Timesheets: node("/timesheets"),
   Campaigns: node("/campaigns", kids({

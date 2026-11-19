@@ -8,14 +8,17 @@ import { toast } from "sonner";
 import { ContentArea } from "@/components/layout/ContentArea";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { blobProxyUrl } from "@/lib/blob/urls";
 import { isOilOverdue, oilStatusLabel } from "@/lib/vehicles/oil";
+import { formatEstimatedValue, type AssetType } from "@/lib/vehicles/inventory";
 import { assigneeLabel, vehicleDisplayName } from "@/lib/vehicles/types";
 import { cn } from "@/lib/utils";
 
 type VehicleRow = {
   id: string;
+  assetType: AssetType;
   vehicleNumber: string | null;
   make: string;
   model: string;
@@ -26,6 +29,7 @@ type VehicleRow = {
   assignedUserId: string | null;
   status: "ACTIVE" | "SOLD" | "OUT_OF_SERVICE";
   currentMileage: number;
+  estimatedValueCents: number | null;
   nextOilChangeDueAt: string | null;
   nextOilChangeDueMileage: number | null;
   assignedUser: { id: string; name: string; photoUrl: string | null } | null;
@@ -49,6 +53,8 @@ export default function VehiclesPage() {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("ACTIVE");
   const [assignee, setAssignee] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -63,7 +69,12 @@ export default function VehiclesPage() {
         return;
       }
       const data = await res.json();
-      setVehicles(data.vehicles ?? []);
+      const nextVehicles: VehicleRow[] = data.vehicles ?? [];
+      setVehicles(nextVehicles);
+      setSelectedIds((current) => {
+        const visibleIds = new Set(nextVehicles.map((vehicle) => vehicle.id));
+        return new Set([...current].filter((id) => visibleIds.has(id)));
+      });
       setEmployees(data.employees ?? []);
       setCanManage(Boolean(data.canManage));
     } finally {
@@ -79,27 +90,71 @@ export default function VehiclesPage() {
     () => [{ id: "shop", name: "Shop" }, ...employees],
     [employees]
   );
+  const allSelected = vehicles.length > 0 && vehicles.every((vehicle) => selectedIds.has(vehicle.id));
+
+  function toggleSelected(id: string, checked: boolean) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  async function exportSelected() {
+    if (selectedIds.size === 0) {
+      toast.error("Select at least one vehicle or equipment item");
+      return;
+    }
+    setExporting(true);
+    try {
+      const response = await fetch("/api/vehicles/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [...selectedIds] }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        toast.error(data.error || "Could not export inventory");
+        return;
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `vehicle-equipment-inventory-${new Date().toISOString().slice(0, 10)}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+      toast.success("PDF exported");
+    } catch {
+      toast.error("Could not export inventory");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   return (
     <ContentArea>
       <PageHeader
-        title="Fleet"
-        subtitle="Company vehicles, mileage, maintenance, and issues"
+        title="Vehicles & Equipment"
+        subtitle="Company vehicles, equipment, values, maintenance, and issues"
         actions={
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
               variant="outline"
-              onClick={() => window.location.assign("/api/vehicles/export")}
+              disabled={selectedIds.size === 0 || exporting}
+              onClick={() => void exportSelected()}
             >
               <Download className="mr-1.5 h-4 w-4" />
-              Export all
+              {exporting ? "Exporting…" : `Export selected (${selectedIds.size})`}
             </Button>
             {canManage ? (
               <Button asChild>
                 <Link href="/vehicles/new">
                   <Plus className="mr-1.5 h-4 w-4" />
-                  Add vehicle
+                  Add vehicle or equipment
                 </Link>
               </Button>
             ) : null}
@@ -111,7 +166,7 @@ export default function VehiclesPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search vehicle #, make, model, plate, or VIN…"
+            placeholder="Search vehicle/equipment #, make, model, plate, or VIN…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             className="pl-9"
@@ -143,25 +198,35 @@ export default function VehiclesPage() {
       </div>
 
       {loading ? (
-        <p className="text-sm text-muted-foreground">Loading vehicles…</p>
+        <p className="text-sm text-muted-foreground">Loading inventory…</p>
       ) : vehicles.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-10 text-center">
-          <p className="text-sm text-muted-foreground">No vehicles found.</p>
+          <p className="text-sm text-muted-foreground">No vehicles or equipment found.</p>
           {canManage ? (
             <Button asChild className="mt-4" variant="outline">
-              <Link href="/vehicles/new">Add your first vehicle</Link>
+              <Link href="/vehicles/new">Add your first inventory item</Link>
             </Button>
           ) : null}
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-border">
-          <table className="w-full text-left text-sm">
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="min-w-[920px] w-full text-left text-sm">
             <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-4 py-3 font-medium">Vehicle #</th>
-                <th className="px-4 py-3 font-medium">Vehicle</th>
+                <th className="w-10 px-4 py-3 font-medium">
+                  <Checkbox
+                    aria-label="Select all visible inventory"
+                    checked={allSelected ? true : selectedIds.size > 0 ? "indeterminate" : false}
+                    onCheckedChange={(checked) => {
+                      setSelectedIds(checked ? new Set(vehicles.map((vehicle) => vehicle.id)) : new Set());
+                    }}
+                  />
+                </th>
+                <th className="px-4 py-3 font-medium">Inventory #</th>
+                <th className="px-4 py-3 font-medium">Vehicle / equipment</th>
                 <th className="hidden px-4 py-3 font-medium md:table-cell">Assignee</th>
                 <th className="hidden px-4 py-3 font-medium sm:table-cell">Mileage</th>
+                <th className="px-4 py-3 font-medium">Est. value</th>
                 <th className="px-4 py-3 font-medium">Oil</th>
                 <th className="hidden px-4 py-3 font-medium lg:table-cell">Issues</th>
               </tr>
@@ -185,6 +250,13 @@ export default function VehiclesPage() {
                 });
                 return (
                   <tr key={v.id} className="border-b border-border last:border-0 hover:bg-muted/30">
+                    <td className="px-4 py-3">
+                      <Checkbox
+                        aria-label={`Select ${vehicleDisplayName(v)}`}
+                        checked={selectedIds.has(v.id)}
+                        onCheckedChange={(checked) => toggleSelected(v.id, checked === true)}
+                      />
+                    </td>
                     <td className="px-4 py-3 font-medium tabular-nums">
                       {v.vehicleNumber || "—"}
                     </td>
@@ -204,7 +276,7 @@ export default function VehiclesPage() {
                             {vehicleDisplayName(v)}
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            {v.vin ? `VIN ${v.vin}` : "No VIN"} · {v.status.replaceAll("_", " ")}
+                            {v.assetType === "EQUIPMENT" ? "Equipment" : "Vehicle"} · {v.vin ? `VIN ${v.vin}` : "No VIN"} · {v.status.replaceAll("_", " ")}
                           </div>
                         </div>
                       </Link>
@@ -214,6 +286,9 @@ export default function VehiclesPage() {
                     </td>
                     <td className="hidden px-4 py-3 sm:table-cell">
                       {v.currentMileage.toLocaleString()} mi
+                    </td>
+                    <td className="px-4 py-3 font-medium tabular-nums">
+                      {formatEstimatedValue(v.estimatedValueCents)}
                     </td>
                     <td className="px-4 py-3">
                       <span

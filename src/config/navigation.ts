@@ -38,8 +38,8 @@ export const otherNav: NavItem[] = [
 export const vehiclesSidebar: NavSection[] = [
   {
     items: [
-      { label: "Fleet", href: "/vehicles", exact: true },
-      { label: "Add vehicle", href: "/vehicles/new" },
+      { label: "Inventory", href: "/vehicles", exact: true },
+      { label: "Add vehicle or equipment", href: "/vehicles/new" },
     ],
   },
 ];

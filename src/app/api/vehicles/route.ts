@@ -8,6 +8,7 @@ import {
 } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { computeOilDue } from "@/lib/vehicles/oil";
+import { isAssetType, normalizeAssetType, parseEstimatedValueCents } from "@/lib/vehicles/inventory";
 import { canManageVehicles, canViewVehicles } from "@/lib/vehicles/permissions";
 import { getCompanyEmployees, listVehicles } from "@/lib/vehicles/queries";
 import {
@@ -74,6 +75,12 @@ export async function POST(request: NextRequest) {
         ? (body.status as VehicleStatus)
         : VehicleStatus.ACTIVE;
     const currentMileage = Math.max(0, Number(body.currentMileage) || 0);
+    if (body.assetType !== undefined && !isAssetType(body.assetType)) {
+      return badRequestResponse("Invalid inventory type");
+    }
+    const assetType = normalizeAssetType(body.assetType);
+    const estimatedValue = parseEstimatedValueCents(body.estimatedValue);
+    if (estimatedValue.error) return badRequestResponse(estimatedValue.error);
     const oilIntervalMiles = Math.max(1, Number(body.oilIntervalMiles) || 5000);
     const oilIntervalMonths = Math.max(1, Number(body.oilIntervalMonths) || 6);
     const lastOilChangeAt = body.lastOilChangeAt ? new Date(body.lastOilChangeAt) : null;
@@ -118,6 +125,7 @@ export async function POST(request: NextRequest) {
     const vehicle = await prisma.vehicle.create({
       data: {
         companyId: user.companyId,
+        assetType,
         vehicleNumber,
         make,
         model,
@@ -127,6 +135,7 @@ export async function POST(request: NextRequest) {
         assignedUserId,
         status,
         currentMileage,
+        estimatedValueCents: estimatedValue.value,
         oilIntervalMiles,
         oilIntervalMonths,
         lastOilChangeAt,

@@ -39,6 +39,7 @@ export async function listVehicles(filters: VehicleListFilters) {
     orderBy: [{ status: "asc" }, { year: "desc" }, { make: "asc" }, { model: "asc" }],
     select: {
       id: true,
+      assetType: true,
       vehicleNumber: true,
       make: true,
       model: true,
@@ -49,6 +50,7 @@ export async function listVehicles(filters: VehicleListFilters) {
       assignedUserId: true,
       status: true,
       currentMileage: true,
+      estimatedValueCents: true,
       nextOilChangeDueAt: true,
       nextOilChangeDueMileage: true,
       lastOilChangeAt: true,

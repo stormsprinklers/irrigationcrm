@@ -14,7 +14,7 @@ export default async function VehiclesLayout({ children }: { children: React.Rea
   ];
 
   return (
-    <ModuleLayout title="Vehicles" sections={sections}>
+    <ModuleLayout title="Vehicles & Equipment" sections={sections}>
       {children}
     </ModuleLayout>
   );

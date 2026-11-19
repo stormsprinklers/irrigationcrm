@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { EmployeeSearchPicker } from "@/components/schedule/EmployeeSearchPicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import type { AssetType } from "@/lib/vehicles/inventory";
 
 type Employee = { id: string; name: string };
 
@@ -16,6 +17,7 @@ export default function NewVehiclePage() {
   const router = useRouter();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [saving, setSaving] = useState(false);
+  const [assetType, setAssetType] = useState<AssetType>("VEHICLE");
   const [vehicleNumber, setVehicleNumber] = useState("");
   const [make, setMake] = useState("");
   const [model, setModel] = useState("");
@@ -25,6 +27,7 @@ export default function NewVehiclePage() {
   const [assignedUserId, setAssignedUserId] = useState("");
   const [assignedUserName, setAssignedUserName] = useState("");
   const [currentMileage, setCurrentMileage] = useState("0");
+  const [estimatedValue, setEstimatedValue] = useState("");
   const [oilIntervalMiles, setOilIntervalMiles] = useState("5000");
   const [oilIntervalMonths, setOilIntervalMonths] = useState("6");
   const [lastOilChangeAt, setLastOilChangeAt] = useState("");
@@ -54,6 +57,7 @@ export default function NewVehiclePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           vehicleNumber: vehicleNumber || null,
+          assetType,
           make,
           model,
           year: Number(year),
@@ -61,6 +65,7 @@ export default function NewVehiclePage() {
           licensePlate: licensePlate || null,
           assignedUserId: assignedUserId || null,
           currentMileage: Number(currentMileage) || 0,
+          estimatedValue: estimatedValue || null,
           oilIntervalMiles: Number(oilIntervalMiles) || 5000,
           oilIntervalMonths: Number(oilIntervalMonths) || 6,
           lastOilChangeAt: lastOilChangeAt || null,
@@ -73,7 +78,7 @@ export default function NewVehiclePage() {
         toast.error(data.error || "Failed to create vehicle");
         return;
       }
-      toast.success("Vehicle created");
+      toast.success(assetType === "EQUIPMENT" ? "Equipment created" : "Vehicle created");
       router.push(`/vehicles/${data.id}`);
     } finally {
       setSaving(false);
@@ -83,9 +88,9 @@ export default function NewVehiclePage() {
   return (
     <ContentArea className="max-w-2xl">
       <PageHeader
-        breadcrumb={["Vehicles", "Add vehicle"]}
-        title="Add vehicle"
-        subtitle="Create a fleet vehicle profile"
+        breadcrumb={["Vehicles", "Add inventory"]}
+        title="Add vehicle or equipment"
+        subtitle="Create an inventory profile with an estimated cash value"
         actions={
           <Button asChild variant="outline">
             <Link href="/vehicles">Cancel</Link>
@@ -94,9 +99,35 @@ export default function NewVehiclePage() {
       />
 
       <form onSubmit={onSubmit} className="space-y-6">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <label htmlFor="assetType" className="text-sm font-medium">Inventory type</label>
+            <select
+              id="assetType"
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={assetType}
+              onChange={(event) => setAssetType(event.target.value as AssetType)}
+            >
+              <option value="VEHICLE">Vehicle</option>
+              <option value="EQUIPMENT">Equipment</option>
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="estimatedValue" className="text-sm font-medium">Estimated cash value</label>
+            <Input
+              id="estimatedValue"
+              type="number"
+              min={0}
+              step="0.01"
+              value={estimatedValue}
+              onChange={(event) => setEstimatedValue(event.target.value)}
+              placeholder="0.00"
+            />
+          </div>
+        </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-2">
-            <label htmlFor="vehicleNumber" className="text-sm font-medium">Vehicle number</label>
+            <label htmlFor="vehicleNumber" className="text-sm font-medium">Inventory number</label>
             <Input
               id="vehicleNumber"
               value={vehicleNumber}
@@ -220,7 +251,7 @@ export default function NewVehiclePage() {
             <Link href="/vehicles">Cancel</Link>
           </Button>
           <Button type="submit" disabled={saving}>
-            {saving ? "Saving…" : "Create vehicle"}
+            {saving ? "Saving…" : `Create ${assetType === "EQUIPMENT" ? "equipment" : "vehicle"}`}
           </Button>
         </div>
       </form>

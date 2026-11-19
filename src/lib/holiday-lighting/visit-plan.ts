@@ -98,6 +98,14 @@ export function holidayVisitJobSummary(
 /** Preserve the approved option's aerial plan instead of always installing option A. */
 export function holidayVisitPlan(raw: Prisma.JsonValue | null, letter?: string | null): Prisma.InputJsonObject | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw) || raw.source !== "holiday-lighting-quote") return null;
+  // A visit-level edit is authoritative. Reapplying the approved estimate
+  // option here would make the saved strand/color change disappear on reload.
+  if (raw.visitSpecsUpdated === true) {
+    return {
+      ...raw as Prisma.InputJsonObject,
+      ...(letter ? { approvedOptionLetter: letter } : {}),
+    };
+  }
   const options = Array.isArray(raw.options) ? raw.options : [];
   const option = options.find(value => value && typeof value === "object" && !Array.isArray(value) && value.letter === (letter || "A"));
   const chosen = option && typeof option === "object" && !Array.isArray(option) ? option : null;

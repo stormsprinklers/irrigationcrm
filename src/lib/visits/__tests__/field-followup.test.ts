@@ -140,16 +140,17 @@ test("visit job specs use the approved option even when an older map is stale or
 });
 
 test("visit-level holiday lighting edits override the original approved option", () => {
+  const editedVisit = {
+    source: "holiday-lighting-quote",
+    approvedOptionLetter: "B",
+    visitSpecsUpdated: true,
+    billedLengthFt: 120,
+    colorPattern: "Blue / Winter White",
+    strandColor: "Black",
+    options: [{ letter: "B", billedLengthFt: 80, colorPattern: "Warm White", strandColor: "Green" }],
+  };
   assert.deepEqual(
-    holidayVisitJobSummary({
-      source: "holiday-lighting-quote",
-      approvedOptionLetter: "B",
-      visitSpecsUpdated: true,
-      billedLengthFt: 120,
-      colorPattern: "Blue / Winter White",
-      strandColor: "Black",
-      options: [{ letter: "B", billedLengthFt: 80, colorPattern: "Warm White", strandColor: "Green" }],
-    }),
+    holidayVisitJobSummary(editedVisit),
     {
       totalFeet: 120,
       colors: ["Blue / Winter White"],
@@ -157,6 +158,10 @@ test("visit-level holiday lighting edits override the original approved option",
       strandColor: "Black",
     }
   );
+  const serialized = holidayVisitPlan(editedVisit, "B")!;
+  assert.equal(serialized.colorPattern, "Blue / Winter White");
+  assert.equal(serialized.strandColor, "Black");
+  assert.equal(serialized.billedLengthFt, 120);
 });
 
 test("visit job specs flag a custom color whose description was never saved", () => {
