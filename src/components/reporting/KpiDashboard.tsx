@@ -252,16 +252,16 @@ export function KpiDashboard({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+              <div className={cn("grid grid-cols-2 gap-4", isHome ? "lg:grid-cols-5" : "lg:grid-cols-4")}>
                 {(isHome
-                  ? data.company.filter((metric) => ["Total revenue", "Booking rate", "Service conversion rate", "Active maintenance plans"].includes(metric.label))
+                  ? data.company.filter((metric) => ["Total revenue", "Paid invoice revenue", "Booking rate", "Service conversion rate", "Active maintenance plans"].includes(metric.label))
                   : data.company
                 ).map((metric, index) => (
                   <div
                     key={metric.label}
                     className={cn(
                       index > 0 && "border-t border-border pt-4 lg:border-t-0 lg:pt-0",
-                      index % 4 !== 0 && "lg:border-l lg:border-border lg:pl-4"
+                      index % (isHome ? 5 : 4) !== 0 && "lg:border-l lg:border-border lg:pl-4"
                     )}
                   >
                     <p className="text-xs text-muted-foreground">{metric.label}</p>

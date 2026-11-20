@@ -7,6 +7,7 @@ import {
 import { endOfDay, startOfDay, startOfMonth, startOfYear, subDays } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { reconcileNeedsSchedulingEstimates } from "@/lib/estimates/scheduling";
+import { getPaidInvoiceRevenue } from "@/lib/reporting/paid-invoice-revenue";
 import { sumDiscounts, sumLineItems, toNumber } from "@/lib/visits/totals";
 import type { HomeDateRange, HomeKpi, HomeSummaryCard, HomeSummaryDTO } from "./types";
 
@@ -38,7 +39,7 @@ export async function getHomeSummary(
   const { start, end } = getRangeBounds(dateRange);
   await reconcileNeedsSchedulingEstimates(companyId);
 
-  const [openEstimates, unscheduledVisits, needsSchedulingEstimates, openInvoices, completedVisits, newCustomers, paidInvoices] =
+  const [openEstimates, unscheduledVisits, needsSchedulingEstimates, openInvoices, completedVisits, newCustomers, paidInvoiceRevenue] =
     await Promise.all([
       prisma.estimate.findMany({
         where: { companyId, status: { in: [EstimateStatus.DRAFT, EstimateStatus.SENT] } },
@@ -67,14 +68,7 @@ export async function getHomeSummary(
       prisma.customer.count({
         where: { companyId, createdAt: { gte: start, lte: end } },
       }),
-      prisma.invoice.findMany({
-        where: {
-          companyId,
-          status: { in: [InvoiceStatus.PAID, InvoiceStatus.PARTIAL] },
-          paidAt: { gte: start, lte: end },
-        },
-        select: { total: true },
-      }),
+      getPaidInvoiceRevenue(companyId, start, end),
     ]);
 
   const estimatesTotal = openEstimates.reduce((s, e) => s + toNumber(e.total), 0);
@@ -93,10 +87,8 @@ export async function getHomeSummary(
     jobRevenueFixed += await visitTotal(v);
   }
 
-  const invoiceRevenue = paidInvoices.reduce((s, i) => s + toNumber(i.total), 0);
-  const totalRevenue = jobRevenueFixed + invoiceRevenue;
   const jobsCompleted = completedVisits.length;
-  const avgJobSize = jobsCompleted > 0 ? totalRevenue / jobsCompleted : 0;
+  const avgJobSize = jobsCompleted > 0 ? jobRevenueFixed / jobsCompleted : 0;
 
   const bookedVisits = await prisma.visit.count({
     where: { companyId, createdAt: { gte: start, lte: end } },
@@ -133,7 +125,7 @@ export async function getHomeSummary(
   ];
 
   const kpis: HomeKpi[] = [
-    { label: "Visit Revenue Earned", value: formatCurrency(totalRevenue), change: "—" },
+    { label: "Paid invoice revenue", value: formatCurrency(paidInvoiceRevenue), change: "—" },
     { label: "Visits Completed", value: String(jobsCompleted), change: "—" },
     { label: "Average Visit Size", value: formatCurrency(avgJobSize), change: "—" },
     { label: "Total New Visits Booked", value: String(bookedVisits), change: "—" },

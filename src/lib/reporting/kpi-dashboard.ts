@@ -16,6 +16,7 @@ import {
 } from "@/lib/reporting/date-range";
 import { prisma } from "@/lib/prisma";
 import { fetchLmsTrainingSummary } from "@/lib/integrations/lms-sync";
+import { getPaidInvoiceRevenue } from "@/lib/reporting/paid-invoice-revenue";
 
 export type KpiDateRange = ReportPresetRange | "custom";
 
@@ -118,6 +119,7 @@ export async function getKpiDashboardReport(
     leads,
     activePlanCount,
     googleReviewAssignments,
+    paidInvoiceRevenue,
   ] = await Promise.all([
     overviewOnly ? Promise.resolve([]) : prisma.user.findMany({
       where: { companyId, status: "ACTIVE" },
@@ -244,6 +246,7 @@ export async function getKpiDashboardReport(
       },
       select: { userId: true, share: true },
     }),
+    getPaidInvoiceRevenue(companyId, start, end),
   ]);
 
   const visitRevenues = visits.map((v) => ({
@@ -326,6 +329,7 @@ export async function getKpiDashboardReport(
     { label: "Service revenue", value: formatCurrency(serviceRevenue) },
     { label: "Install revenue", value: formatCurrency(installRevenue) },
     { label: "Total revenue", value: formatCurrency(totalRevenue) },
+    { label: "Paid invoice revenue", value: formatCurrency(paidInvoiceRevenue) },
     {
       label: "Service avg ticket",
       value: serviceVisits.length > 0 ? formatCurrency(avgServiceTicket) : "—",
