@@ -11,7 +11,13 @@ import {
   bulkMergeCustomers,
   bulkSetDoNotService,
 } from "@/lib/customers/bulk";
-import { canFlagDoNotService, canManageCustomers } from "@/lib/customers/permissions";
+import {
+  canApproveCustomerDeletion,
+  canDeleteCustomers,
+  canFlagDoNotService,
+  canManageCustomers,
+  canMergeCustomers,
+} from "@/lib/customers/permissions";
 
 type BulkAction =
   | "delete"
@@ -45,24 +51,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, count: customerIds.length });
     }
 
-    if (!canManageCustomers(user.role)) return forbiddenResponse();
-
     if (action === "delete") {
-      const result = await bulkDeleteCustomers(user.companyId, customerIds);
+      if (!canDeleteCustomers(user.role)) return forbiddenResponse();
+      const result = await bulkDeleteCustomers(user.companyId, customerIds, {
+        allowBillingHistory: canApproveCustomerDeletion(user.role),
+      });
       return NextResponse.json({ ok: result.failed.length === 0, ...result });
     }
 
-    if (action === "archive") {
-      await bulkArchiveCustomers(user.companyId, customerIds, true);
-      return NextResponse.json({ ok: true, count: customerIds.length });
-    }
-
-    if (action === "restore") {
-      await bulkArchiveCustomers(user.companyId, customerIds, false);
-      return NextResponse.json({ ok: true, count: customerIds.length });
-    }
-
     if (action === "merge") {
+      if (!canMergeCustomers(user.role)) return forbiddenResponse();
       const targetCustomerId = body.targetCustomerId as string | undefined;
       if (!targetCustomerId) return badRequestResponse("targetCustomerId is required");
       if (!customerIds.includes(targetCustomerId)) {
@@ -74,6 +72,18 @@ export async function POST(request: NextRequest) {
       }
       await bulkMergeCustomers(user.companyId, targetCustomerId, sources);
       return NextResponse.json({ ok: true, mergedIntoId: targetCustomerId, count: sources.length });
+    }
+
+    if (!canManageCustomers(user.role)) return forbiddenResponse();
+
+    if (action === "archive") {
+      await bulkArchiveCustomers(user.companyId, customerIds, true);
+      return NextResponse.json({ ok: true, count: customerIds.length });
+    }
+
+    if (action === "restore") {
+      await bulkArchiveCustomers(user.companyId, customerIds, false);
+      return NextResponse.json({ ok: true, count: customerIds.length });
     }
 
     return badRequestResponse("Unknown action");

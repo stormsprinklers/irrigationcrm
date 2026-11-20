@@ -5,7 +5,13 @@ import {
   requireSessionUser,
   unauthorizedResponse,
 } from "@/lib/api-auth";
-import { canEditCustomerTags, canFlagDoNotService, canManageCustomers } from "@/lib/customers/permissions";
+import {
+  canApproveCustomerDeletion,
+  canDeleteCustomers,
+  canEditCustomerTags,
+  canFlagDoNotService,
+  canManageCustomers,
+} from "@/lib/customers/permissions";
 import { deleteCustomerForCompany } from "@/lib/customers/delete";
 import { getCustomerForCompany, serializeCustomer } from "@/lib/customers/queries";
 import { customerIsContact } from "@/lib/customers/lifetime-value";
@@ -155,16 +161,22 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     const user = await requireSessionUser();
     const fieldDenied = forbiddenForFieldRole(user.role);
     if (fieldDenied) return fieldDenied;
-    if (!canManageCustomers(user.role)) return forbiddenResponse();
+    if (!canDeleteCustomers(user.role)) return forbiddenResponse();
 
     const { id } = await params;
-    const result = await deleteCustomerForCompany(user.companyId, id);
+    const result = await deleteCustomerForCompany(user.companyId, id, {
+      allowBillingHistory: canApproveCustomerDeletion(user.role),
+    });
     if ("notFound" in result && result.notFound) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
     if (!result.ok) {
       return NextResponse.json(
-        { error: "error" in result ? result.error : "Failed to delete customer" },
+        {
+          error: "error" in result ? result.error : "Failed to delete customer",
+          requiresAdminApproval:
+            "requiresAdminApproval" in result && result.requiresAdminApproval,
+        },
         { status: 409 }
       );
     }

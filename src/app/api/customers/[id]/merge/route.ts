@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { forbiddenForFieldRole, badRequestResponse,
+import {
+  badRequestResponse,
   forbiddenResponse,
-  requireSessionUser, } from "@/lib/api-auth";
+  requireSessionUser,
+} from "@/lib/api-auth";
 import { mergeCustomers } from "@/lib/customers/merge";
+import { canMergeCustomers } from "@/lib/customers/permissions";
 import { serializeCustomer } from "@/lib/customers/queries";
 
 type Params = { params: Promise<{ id: string }> };
@@ -10,7 +13,7 @@ type Params = { params: Promise<{ id: string }> };
 export async function POST(request: NextRequest, { params }: Params) {
   try {
     const user = await requireSessionUser();
-    const fieldDenied = forbiddenForFieldRole(user.role); if (fieldDenied) return fieldDenied;
+    if (!canMergeCustomers(user.role)) return forbiddenResponse();
 
     const { id: sourceId } = await params;
     const body = await request.json();

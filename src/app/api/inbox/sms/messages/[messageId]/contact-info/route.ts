@@ -7,7 +7,7 @@ import {
 } from "@/lib/api-auth";
 import { formatContactName, withDefaultPhone } from "@/lib/inbox/contact-info-types";
 import { ensureMessageContactInfoParsed } from "@/lib/inbox/contact-info-process";
-import { findCustomerByPhone } from "@/lib/inbox/customer-lookup";
+import { findCustomerByContact } from "@/lib/inbox/customer-lookup";
 import { normalizePhone } from "@/lib/inbox/contacts";
 import { formatPhoneDisplay, phonesMatch } from "@/lib/inbox/phone";
 import { prisma } from "@/lib/prisma";
@@ -46,12 +46,19 @@ async function loadMessageForCompany(messageId: string, companyId: string) {
 
 type LoadedMessage = NonNullable<Awaited<ReturnType<typeof loadMessageForCompany>>>;
 
-async function resolveTargetCustomer(message: LoadedMessage, companyId: string) {
+async function resolveTargetCustomer(
+  message: LoadedMessage,
+  companyId: string,
+  email?: string | null
+) {
   if (message.conversation.customer) return message.conversation.customer;
   const participantPhone = message.conversation.participantPhone;
-  if (!participantPhone) return null;
+  if (!participantPhone && !email) return null;
 
-  const matched = await findCustomerByPhone(companyId, participantPhone);
+  const matched = await findCustomerByContact(companyId, {
+    phone: participantPhone,
+    email,
+  });
   if (!matched) return null;
   return prisma.customer.findFirst({
     where: { id: matched.id, companyId },
@@ -136,7 +143,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const phone = phoneRaw ? normalizePhone(phoneRaw) : null;
 
     const detectedName = [firstName, lastName].filter(Boolean).join(" ").trim();
-    const targetCustomer = await resolveTargetCustomer(message, user.companyId);
+    const targetCustomer = await resolveTargetCustomer(message, user.companyId, email);
     const name =
       detectedName ||
       targetCustomer?.name ||

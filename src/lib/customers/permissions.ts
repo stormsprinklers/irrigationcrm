@@ -4,6 +4,18 @@ export function canManageCustomers(role: UserRole | string) {
   return role === "ADMIN" || role === "MANAGER";
 }
 
+export function canDeleteCustomers(role: UserRole | string) {
+  return role === "ADMIN" || role === "MANAGER" || role === "CSR";
+}
+
+export function canMergeCustomers(role: UserRole | string) {
+  return role === "ADMIN" || role === "MANAGER" || role === "CSR";
+}
+
+export function canApproveCustomerDeletion(role: UserRole | string) {
+  return role === "ADMIN";
+}
+
 export function canFlagDoNotService(role: UserRole | string) {
   return (
     role === "ADMIN" ||

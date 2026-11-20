@@ -103,6 +103,12 @@ export function AddCustomerQuickDialog({ open, prefill, onClose, onCreated }: Pr
         }),
       });
       const data = await res.json().catch(() => ({}));
+      if (res.status === 409 && typeof data.existingCustomerId === "string") {
+        toast.info(data.error ?? "A matching customer already exists");
+        window.location.href = `/customers/${data.existingCustomerId}`;
+        onClose();
+        return;
+      }
       if (!res.ok) {
         toast.error(data.error ?? "Failed to create customer");
         return;

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { forbiddenForFieldRole, badRequestResponse, forbiddenResponse, requireSessionUser, unauthorizedResponse } from "@/lib/api-auth";
 import { countCustomers, listCustomers, serializeCustomer } from "@/lib/customers/queries";
 import { parseCustomerRecordSegment } from "@/lib/customers/lifetime-value";
+import { findCustomerByContact } from "@/lib/inbox/customer-lookup";
 import { normalizePhone } from "@/lib/inbox/phone";
 import { prisma } from "@/lib/prisma";
 
@@ -45,12 +46,26 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     if (!body.name?.trim()) return badRequestResponse("name is required");
 
+    const phone = body.phone ? normalizePhone(String(body.phone)) : null;
+    const email = body.email ? String(body.email).trim().toLowerCase() : null;
+    const existing = await findCustomerByContact(user.companyId, { phone, email });
+    if (existing) {
+      return NextResponse.json(
+        {
+          error: `A matching customer already exists: ${existing.name}`,
+          existingCustomerId: existing.id,
+          existingCustomerName: existing.name,
+        },
+        { status: 409 }
+      );
+    }
+
     const customer = await prisma.customer.create({
       data: {
         companyId: user.companyId,
         name: String(body.name).trim(),
-        phone: body.phone ? normalizePhone(String(body.phone)) : null,
-        email: body.email ?? null,
+        phone,
+        email,
         companyName: body.companyName ?? null,
         address: body.address ?? null,
         city: body.city ?? null,

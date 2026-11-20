@@ -36,7 +36,12 @@ import { CustomerTagsSection } from "@/components/customers/CustomerTagsSection"
 import { TrackingDataDisclosure } from "@/components/customers/TrackingDataDisclosure";
 import { CustomerReferralsSection } from "@/components/customers/CustomerReferralsSection";
 import { AddressFields } from "@/components/customers/AddressFields";
-import { canFlagDoNotService, canManageCustomers } from "@/lib/customers/permissions";
+import {
+  canDeleteCustomers,
+  canFlagDoNotService,
+  canManageCustomers,
+  canMergeCustomers,
+} from "@/lib/customers/permissions";
 import { marketingConsentLabel } from "@/lib/marketing/opt-out";
 import { canViewMaintenancePlansNav } from "@/lib/settings/access";
 import { useIrrigationFeatures, useHolidayLightingFeatures, useMaintenancePlansFeatures } from "@/components/layout/CompanyBrandProvider";
@@ -233,6 +238,8 @@ export function CustomerProfile({ customerId }: Props) {
   const [activeTab, setActiveTab] = useState(initialTab);
   const userRole = session?.user?.role ?? "TECH";
   const canManage = canManageCustomers(userRole);
+  const canDelete = canDeleteCustomers(userRole);
+  const canMerge = canMergeCustomers(userRole);
   const canFlagDns = canFlagDoNotService(userRole);
   const canViewInvoices = canAccessInvoices(userRole);
   const canRefund = canIssueRefunds(userRole);
@@ -887,19 +894,25 @@ export function CustomerProfile({ customerId }: Props) {
           )}
           {customer.companyName && <p className="text-muted-foreground">{customer.companyName}</p>}
         </div>
-        {canManage && (
+        {(canManage || canMerge || canDelete) && (
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => void sendPortalLink()}>
-              Send portal link
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => setMergeOpen(true)}>
-              <GitMerge className="h-4 w-4" />
-              Merge
-            </Button>
-            <Button type="button" variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
-              <Trash2 className="h-4 w-4" />
-              Delete
-            </Button>
+            {canManage ? (
+              <Button type="button" variant="outline" size="sm" onClick={() => void sendPortalLink()}>
+                Send portal link
+              </Button>
+            ) : null}
+            {canMerge ? (
+              <Button type="button" variant="outline" size="sm" onClick={() => setMergeOpen(true)}>
+                <GitMerge className="h-4 w-4" />
+                Merge
+              </Button>
+            ) : null}
+            {canDelete ? (
+              <Button type="button" variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
+                <Trash2 className="h-4 w-4" />
+                Delete
+              </Button>
+            ) : null}
           </div>
         )}
       </div>
@@ -1900,7 +1913,7 @@ export function CustomerProfile({ customerId }: Props) {
 
       <ConfirmModal
         title="Delete customer?"
-        message="Are you sure you want to delete this customer? All related records will be removed or unlinked. This cannot be undone."
+        message="Are you sure you want to delete this customer? All related records will be removed or unlinked. This cannot be undone. Customers with invoice history can only be deleted by an admin."
         confirmLabel="Yes, delete customer"
         open={deleteOpen}
         onClose={() => setDeleteOpen(false)}

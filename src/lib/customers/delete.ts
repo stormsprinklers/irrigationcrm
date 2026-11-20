@@ -1,17 +1,45 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
+export function customerDeletionNeedsAdminApproval(
+  invoiceCount: number,
+  allowBillingHistory: boolean
+) {
+  return invoiceCount > 0 && !allowBillingHistory;
+}
+
 /**
  * Hard-delete a customer after clearing relations that often block cascade
  * (estimate selectedOption circular FK, maintenance billing → invoice links).
  */
-export async function deleteCustomerForCompany(companyId: string, customerId: string) {
+export async function deleteCustomerForCompany(
+  companyId: string,
+  customerId: string,
+  options: { allowBillingHistory?: boolean } = {}
+) {
   const existing = await prisma.customer.findFirst({
     where: { id: customerId, companyId },
-    select: { id: true },
+    select: {
+      id: true,
+      name: true,
+      _count: { select: { invoices: true } },
+    },
   });
   if (!existing) {
     return { ok: false as const, notFound: true as const };
+  }
+  if (
+    customerDeletionNeedsAdminApproval(
+      existing._count.invoices,
+      options.allowBillingHistory === true
+    )
+  ) {
+    return {
+      ok: false as const,
+      notFound: false as const,
+      requiresAdminApproval: true as const,
+      error: `${existing.name} has invoice history and must be deleted by an admin.`,
+    };
   }
 
   try {
@@ -91,10 +119,14 @@ export async function deleteCustomerForCompany(companyId: string, customerId: st
   }
 }
 
-export async function bulkDeleteCustomers(companyId: string, customerIds: string[]) {
+export async function bulkDeleteCustomers(
+  companyId: string,
+  customerIds: string[],
+  options: { allowBillingHistory?: boolean } = {}
+) {
   const results = { deleted: 0, failed: [] as Array<{ id: string; reason: string }> };
   for (const id of customerIds) {
-    const result = await deleteCustomerForCompany(companyId, id);
+    const result = await deleteCustomerForCompany(companyId, id, options);
     if (result.ok) results.deleted += 1;
     else results.failed.push({
       id,

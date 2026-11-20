@@ -132,6 +132,55 @@ export async function findCustomerByPhone(
   return findByDigitKey(companyId, last10);
 }
 
+export async function findCustomerByEmail(
+  companyId: string,
+  email: string
+): Promise<CustomerContact | null> {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) return null;
+
+  const primary = await prisma.customer.findFirst({
+    where: { companyId, email: { equals: normalized, mode: "insensitive" } },
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+      email: true,
+      doNotService: true,
+    },
+  });
+  if (primary) return primary;
+
+  const secondary = await prisma.customerEmail.findFirst({
+    where: { companyId, email: { equals: normalized, mode: "insensitive" } },
+    include: {
+      customer: {
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          email: true,
+          doNotService: true,
+        },
+      },
+    },
+  });
+  return secondary?.customer ?? null;
+}
+
+export async function findCustomerByContact(
+  companyId: string,
+  contact: { phone?: string | null; email?: string | null }
+): Promise<CustomerContact | null> {
+  if (contact.phone?.trim()) {
+    const phoneMatch = await findCustomerByPhone(companyId, contact.phone);
+    if (phoneMatch) return phoneMatch;
+  }
+  return contact.email?.trim()
+    ? findCustomerByEmail(companyId, contact.email)
+    : null;
+}
+
 /**
  * Customer to attach to an SMS phone. Prefer the person who owns this number.
  * Never return a requested id whose stored phone is a different number.

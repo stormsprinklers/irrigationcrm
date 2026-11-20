@@ -12,7 +12,12 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { GitMerge, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { canFlagDoNotService, canManageCustomers } from "@/lib/customers/permissions";
+import {
+  canDeleteCustomers,
+  canFlagDoNotService,
+  canManageCustomers,
+  canMergeCustomers,
+} from "@/lib/customers/permissions";
 import { CustomerNameWithBadge } from "@/components/customers/CustomerNameWithBadge";
 import { CustomerImportDialog } from "@/components/customers/CustomerImportDialog";
 import { AddCustomerQuickDialog } from "@/components/customers/AddCustomerQuickDialog";
@@ -58,6 +63,8 @@ export default function CustomersPageContent({ segment }: Props) {
   const { data: session } = useSession();
   const userRole = session?.user?.role ?? "TECH";
   const canManage = canManageCustomers(userRole);
+  const canDelete = canDeleteCustomers(userRole);
+  const canMerge = canMergeCustomers(userRole);
   const canFlagDns = canFlagDoNotService(userRole);
 
   const searchParams = useSearchParams();
@@ -285,28 +292,30 @@ export default function CustomersPageContent({ segment }: Props) {
         </TabsList>
       </Tabs>
 
-      {selectedIds.length > 0 && (canManage || canFlagDns) && (
+      {selectedIds.length > 0 && (canManage || canMerge || canDelete || canFlagDns) && (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 p-3">
           <span className="text-sm font-medium">{selectedIds.length} selected</span>
+          {canMerge && listTab === "ACTIVE" && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={bulkLoading}
+              onClick={() => {
+                if (selectedIds.length < 2) {
+                  toast.error("Select at least two customers to merge");
+                  return;
+                }
+                setMergeTargetId(selectedIds[0] ?? "");
+                setMergeOpen(true);
+              }}
+            >
+              <GitMerge className="h-4 w-4" />
+              Merge
+            </Button>
+          )}
           {canManage && listTab === "ACTIVE" && (
             <>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={bulkLoading}
-                onClick={() => {
-                  if (selectedIds.length < 2) {
-                    toast.error("Select at least two customers to merge");
-                    return;
-                  }
-                  setMergeTargetId(selectedIds[0] ?? "");
-                  setMergeOpen(true);
-                }}
-              >
-                <GitMerge className="h-4 w-4" />
-                Merge
-              </Button>
               <Button
                 type="button"
                 size="sm"
@@ -316,17 +325,19 @@ export default function CustomersPageContent({ segment }: Props) {
               >
                 Archive
               </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="destructive"
-                disabled={bulkLoading}
-                onClick={() => setDeleteOpen(true)}
-              >
-                <Trash2 className="h-4 w-4" />
-                Delete
-              </Button>
             </>
+          )}
+          {canDelete && listTab === "ACTIVE" && (
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              disabled={bulkLoading}
+              onClick={() => setDeleteOpen(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </Button>
           )}
           {canManage && listTab === "ARCHIVED" && (
             <Button
@@ -427,7 +438,8 @@ export default function CustomersPageContent({ segment }: Props) {
             <h2 className="text-lg font-semibold">Delete customers?</h2>
             <p className="mt-2 text-sm text-muted-foreground">
               Are you sure you want to delete {selectedIds.length} customer
-              {selectedIds.length === 1 ? "" : "s"}? This cannot be undone.
+              {selectedIds.length === 1 ? "" : "s"}? This cannot be undone. Customers with
+              invoice history can only be deleted by an admin.
             </p>
             <div className="mt-4 flex gap-2">
               <Button
