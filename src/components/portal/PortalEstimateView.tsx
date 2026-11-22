@@ -658,7 +658,7 @@ export function PortalEstimateView({
             if (!accepted) hasInk.current = false;
           }}
           disabled={loading}
-          className="mt-1"
+          className="mt-0.5 h-9 w-9 rounded-md [&_svg]:h-5 [&_svg]:w-5"
         />
         <p id="estimate-legal-acceptance-copy" className="text-sm leading-6 text-slate-700">
           I have read and accept the{" "}
@@ -780,11 +780,13 @@ export function PortalEstimateView({
               <a className="inline-flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-primary transition-colors hover:bg-muted" href={`sms:${company.phone.replace(/[^+\d]/g, "")}`}><MessageSquare className="h-4 w-4" aria-hidden="true" /><span><span className="font-medium">Text</span> {formatPhoneDisplay(company.phone)}</span></a>
             </> : null}
           </div>
-          <p className="text-sm text-muted-foreground capitalize">
-            {estimate.status === "SENT" && estimate.signedAt
-              ? "Pending payment arrangement"
-              : estimate.status.toLowerCase()}
-          </p>
+          {estimate.status !== "SENT" || estimate.signedAt ? (
+            <p className="text-sm text-muted-foreground capitalize">
+              {estimate.status === "SENT"
+                ? "Pending payment arrangement"
+                : estimate.status.toLowerCase()}
+            </p>
+          ) : null}
           {estimate.expiresAt ? (
             <p className="text-sm">Expires {format(new Date(estimate.expiresAt), "MMM d, yyyy")}</p>
           ) : null}
@@ -938,29 +940,23 @@ export function PortalEstimateView({
 
         {canSign ? (
           <div id="portal-estimate-sign" className="space-y-3 rounded-lg border bg-white p-4">
-            <p className="text-sm font-medium">
-              Ready to approve
-              {(estimate.options?.length ?? 0) > 1
-                ? ` (${activeOption?.label ?? "option"})`
-                : selectedTier === "PREMIUM"
-                  ? " (Premium)"
-                  : estimate.premiumOptionTotal != null
-                    ? " (Standard)"
-                    : ""}
-            </p>
-            <p className="text-lg font-semibold">{formatCurrency(displayTotal())}</p>
+            <Button
+              type="button"
+              className="w-full"
+              onClick={openApproval}
+              disabled={loading}
+            >
+              Approve {formatCurrency(displayTotal())}
+            </Button>
             {requiresHolidayCard ? (
               <button
                 type="button"
-                className="text-sm font-medium text-[#4C9BC8] underline underline-offset-2"
+                className="w-full text-center text-sm font-medium text-[#4C9BC8] underline underline-offset-2"
                 onClick={() => setCancellationPolicyOpen(true)}
               >
                 Cancellation Fee: {formatCurrency(cancellationFee)}
               </button>
             ) : null}
-            <Button type="button" onClick={openApproval} disabled={loading}>
-              Approve
-            </Button>
           </div>
         ) : needsPaymentChoice ? (
           <section className="space-y-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
