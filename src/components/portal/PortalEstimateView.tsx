@@ -942,7 +942,7 @@ export function PortalEstimateView({
           <div id="portal-estimate-sign" className="space-y-3 rounded-lg border bg-white p-4">
             <Button
               type="button"
-              className="w-full"
+              className="h-20 w-full text-xl font-semibold"
               onClick={openApproval}
               disabled={loading}
             >
