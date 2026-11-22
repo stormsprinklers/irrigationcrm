@@ -47,9 +47,9 @@ const sections: Array<{ title: string; paragraphs: string[] }> = [
     title: "6. Cancellation by Customer; Cancellation Fee",
     paragraphs: [
       "6.1 How to Cancel. Customer may cancel at any time by written notice to Company at hello@utah.christmas or through any cancellation mechanism Company makes available. Cancellation is effective when Company receives the notice.",
-      "6.2 Cancellation Fee. Because the Materials are selected, purchased, and configured for the Property and their cost is not included in the Annual Subscription Fee, upon cancellation Customer agrees to purchase the Materials from Company for the total MSRP of all Materials then on the Materials List, plus applicable sales tax. The Cancellation Fee is due within 15 days after cancellation and may be charged under Section 3.3. It is a purchase price for the Materials, not a penalty.",
+      "6.2 Cancellation Fee; Five-Year Commitment. Because the Materials are selected, purchased, and configured for the Property and their cost is not included in the Annual Subscription Fee, if Customer cancels before the fifth anniversary of the Effective Date, Customer agrees to purchase the Materials from Company for the total MSRP of all Materials then on the Materials List, plus applicable sales tax. The Cancellation Fee is due within 15 days after cancellation and may be charged under Section 3.3. It is a purchase price for the Materials, not a penalty. After the fifth anniversary, Customer may cancel without a Cancellation Fee, and Company may remove and retain the Materials.",
       "6.3 Transfer of Materials. Upon payment of the Cancellation Fee in full, title transfers to Customer AS IS, with no Company warranty other than any transferable manufacturer warranty. Company will deliver the Materials at the Property or, if installed, leave them in place, and has no further obligation to remove, store, maintain, or reinstall them.",
-      "6.4 Timing; Amounts Owed. If Customer cancels after paying the Booking Deposit but before installation, the Booking Deposit is non-refundable and will be applied against the Cancellation Fee. If Customer cancels after installation, all amounts for that Season remain due in addition to the Cancellation Fee. The fee is waived or credited only as provided in Sections 7 and 8.3.",
+      "6.4 Timing; Amounts Owed. During the first five Seasons, if Customer cancels after paying the Booking Deposit but before installation, the Booking Deposit is non-refundable and will be applied against the Cancellation Fee. If Customer cancels after installation, all amounts for that Season remain due in addition to any applicable Cancellation Fee. The fee is waived or credited only as provided in Sections 7 and 8.3.",
     ],
   },
   {
@@ -112,7 +112,7 @@ const sections: Array<{ title: string; paragraphs: string[] }> = [
       "Recurring subscription. This annual subscription automatically renews each year until cancelled.",
       "Payments. 50% is charged at booking and on each Renewal Date, and 50% upon installation, with authorization to charge the payment method on file.",
       "Price adjustments. The Annual Subscription Fee may increase by up to 5% per year with advance notice.",
-      "Cancellation Fee. If Customer cancels, Customer purchases the installed Materials at MSRP and they become Customer property. The fee is waived for an eligible transfer and credited toward an eligible permanent-lighting purchase.",
+      "Cancellation Fee. If Customer cancels during the first five Seasons, Customer purchases the installed Materials at MSRP and they become Customer property. After the fifth anniversary, Customer may cancel without this fee. The fee is also waived for an eligible transfer and credited toward an eligible permanent-lighting purchase.",
       "Company's rights; liability. Company may decline or discontinue service and may waive the Cancellation Fee in its discretion; Company's liability is limited as described in Section 10.",
     ],
   },
@@ -140,7 +140,7 @@ export async function buildHolidaySubscriptionAgreementPdf(params: {
     "This Seasonal Holiday Lighting Subscription Agreement (this Agreement) is between Storm Sprinklers LLC, doing business as Chestnut & Cheer (Company, we, or us), and the customer identified at checkout or on the signature page (Customer, you, or your). This Agreement is effective on the date Customer accepts it (the Effective Date)."
   );
   pdf.addBoldBody(
-    "PLEASE READ CAREFULLY. THIS IS A RECURRING, ANNUALLY RENEWING SUBSCRIPTION. IT INCLUDES A CANCELLATION FEE EQUAL TO THE MANUFACTURER'S SUGGESTED RETAIL PRICE OF THE LIGHTS, MATERIALS, AND DECORATIONS INSTALLED AT YOUR PROPERTY (SECTION 6), AN ANNUAL PRICE ADJUSTMENT RIGHT (SECTION 3.4), AND A LIMITATION OF LIABILITY (SECTION 10)."
+    "PLEASE READ CAREFULLY. THIS IS A RECURRING, ANNUALLY RENEWING SUBSCRIPTION. DURING THE FIRST FIVE SEASONS, IT INCLUDES A CANCELLATION FEE EQUAL TO THE MANUFACTURER'S SUGGESTED RETAIL PRICE OF THE LIGHTS, MATERIALS, AND DECORATIONS INSTALLED AT YOUR PROPERTY (SECTION 6), AN ANNUAL PRICE ADJUSTMENT RIGHT (SECTION 3.4), AND A LIMITATION OF LIABILITY (SECTION 10)."
   );
 
   for (const section of sections) {

@@ -1,4 +1,4 @@
-export const HOLIDAY_SUBSCRIPTION_AGREEMENT_VERSION = "2026-11-06";
+export const HOLIDAY_SUBSCRIPTION_AGREEMENT_VERSION = "2026-11-21";
 
 export type HolidaySubscriptionAgreementMaterial = {
   id: string;

@@ -28,7 +28,10 @@ import {
 
 function customerFacingHolidayDescription(description: string | null) {
   return hideHolidayFootage(
-    description?.replace(/unmarked-up material cost/gi, "material cost") ?? description
+    description
+      ?.replace(/unmarked-up material cost/gi, "material cost")
+      .replace(/yearly recurring service(?! commitment)/gi, "Yearly recurring service commitment") ??
+      description
   );
 }
 

@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import type { HolidaySubscriptionAgreementData } from "@/lib/holiday-lighting/subscription-agreement";
 
@@ -29,11 +30,15 @@ export function HolidaySubscriptionAgreementDialog({
   onClose,
   agreement,
   companyName,
+  title,
+  footerContent,
 }: {
   open: boolean;
   onClose: () => void;
   agreement: HolidaySubscriptionAgreementData;
   companyName: string;
+  title?: string;
+  footerContent?: ReactNode;
 }) {
   if (!open) return null;
 
@@ -51,7 +56,7 @@ export function HolidaySubscriptionAgreementDialog({
               {companyName}
             </p>
             <h2 id="holiday-agreement-title" className="mt-1 text-xl font-bold text-slate-950">
-              Seasonal Holiday Lighting Subscription Agreement
+              {title ?? "Seasonal Holiday Lighting Subscription Agreement"}
             </h2>
             <p className="mt-1 text-xs text-slate-500">
               Estimate {agreement.estimateNumber} · Agreement version {agreement.version}
@@ -63,7 +68,7 @@ export function HolidaySubscriptionAgreementDialog({
         </header>
 
         <div className="overflow-y-auto px-5 py-6 sm:px-8">
-          <article className="mx-auto max-w-4xl space-y-7">
+          <article id="estimate-terms-contract" className="mx-auto max-w-4xl space-y-7">
             <div className="space-y-3 text-sm leading-6 text-slate-700">
               <p className="text-center italic">Storm Sprinklers LLC, doing business as Chestnut &amp; Cheer</p>
               <p>
@@ -74,9 +79,10 @@ export function HolidaySubscriptionAgreementDialog({
               </p>
               <p className="font-bold uppercase text-slate-950">
                 Please read carefully. This is a recurring, annually renewing subscription. It includes
-                a cancellation fee equal to the manufacturer’s suggested retail price of the lights,
-                materials, and decorations installed at your property (Section 6), an annual price
-                adjustment right (Section 3.4), and a limitation of liability (Section 10).
+                a cancellation fee during the first five Seasons equal to the manufacturer’s suggested
+                retail price of the lights, materials, and decorations installed at your property
+                (Section 6), an annual price adjustment right (Section 3.4), and a limitation of
+                liability (Section 10).
               </p>
             </div>
 
@@ -112,9 +118,9 @@ export function HolidaySubscriptionAgreementDialog({
 
             <AgreementSection title="6. Cancellation by Customer; Cancellation Fee">
               <p><strong>6.1 How to Cancel.</strong> Customer may cancel at any time by written notice to Company at <a className="text-sky-700 underline" href="mailto:hello@utah.christmas">hello@utah.christmas</a> or through any cancellation mechanism Company makes available. Cancellation is effective when Company receives the notice.</p>
-              <p><strong>6.2 Cancellation Fee.</strong> Because the Materials are selected, purchased, and configured for the Property and their cost is not included in the Annual Subscription Fee, upon cancellation Customer agrees to purchase the Materials from Company for the total MSRP of all Materials then on the Materials List, plus applicable sales tax. The Cancellation Fee is due within 15 days after cancellation and may be charged under Section 3.3. It is a purchase price for the Materials, not a penalty.</p>
+              <p><strong>6.2 Cancellation Fee; Five-Year Commitment.</strong> Because the Materials are selected, purchased, and configured for the Property and their cost is not included in the Annual Subscription Fee, if Customer cancels before the fifth anniversary of the Effective Date, Customer agrees to purchase the Materials from Company for the total MSRP of all Materials then on the Materials List, plus applicable sales tax. The Cancellation Fee is due within 15 days after cancellation and may be charged under Section 3.3. It is a purchase price for the Materials, not a penalty. After the fifth anniversary, Customer may cancel without a Cancellation Fee, and Company may remove and retain the Materials.</p>
               <p><strong>6.3 Transfer of Materials.</strong> Upon payment of the Cancellation Fee in full, title transfers to Customer “AS IS,” with no Company warranty other than any transferable manufacturer warranty. Company will deliver the Materials at the Property or, if installed, leave them in place, and has no further obligation to remove, store, maintain, or reinstall them.</p>
-              <p><strong>6.4 Timing; Amounts Owed.</strong> If Customer cancels after paying the Booking Deposit but before installation, the Booking Deposit is non-refundable and will be applied against the Cancellation Fee. If Customer cancels after installation, all amounts for that Season remain due in addition to the Cancellation Fee. The fee is waived or credited only as provided in Sections 7 and 8.3.</p>
+              <p><strong>6.4 Timing; Amounts Owed.</strong> During the first five Seasons, if Customer cancels after paying the Booking Deposit but before installation, the Booking Deposit is non-refundable and will be applied against the Cancellation Fee. If Customer cancels after installation, all amounts for that Season remain due in addition to any applicable Cancellation Fee. The fee is waived or credited only as provided in Sections 7 and 8.3.</p>
             </AgreementSection>
 
             <AgreementSection title="7. Relocation; Permanent Lighting Credit">
@@ -162,7 +168,7 @@ export function HolidaySubscriptionAgreementDialog({
                 <li className="list-disc"><strong>Recurring subscription.</strong> This annual subscription automatically renews each year until cancelled.</li>
                 <li className="list-disc"><strong>Payments.</strong> 50% is charged at booking and on each Renewal Date, and 50% upon installation, with authorization to charge the payment method on file.</li>
                 <li className="list-disc"><strong>Price adjustments.</strong> The Annual Subscription Fee may increase by up to 5% per year with advance notice.</li>
-                <li className="list-disc"><strong>Cancellation Fee.</strong> If Customer cancels, Customer purchases the installed Materials at MSRP and they become Customer property. The fee is waived for an eligible transfer and credited toward an eligible permanent-lighting purchase.</li>
+                <li className="list-disc"><strong>Cancellation Fee.</strong> If Customer cancels during the first five Seasons, Customer purchases the installed Materials at MSRP and they become Customer property. After the fifth anniversary, Customer may cancel without this fee. The fee is also waived for an eligible transfer and credited toward an eligible permanent-lighting purchase.</li>
                 <li className="list-disc"><strong>Company’s rights; liability.</strong> Company may decline or discontinue service and may waive the Cancellation Fee in its discretion; Company’s liability is limited as described in Section 10.</li>
               </ul>
             </AgreementSection>
@@ -246,8 +252,12 @@ export function HolidaySubscriptionAgreementDialog({
           </article>
         </div>
 
-        <footer className="border-t bg-slate-50 px-5 py-3 text-right sm:px-7">
-          <Button type="button" onClick={onClose}>Return to estimate</Button>
+        <footer className="border-t bg-slate-50 px-5 py-4 sm:px-7">
+          {footerContent ?? (
+            <div className="text-right">
+              <Button type="button" onClick={onClose}>Return to estimate</Button>
+            </div>
+          )}
         </footer>
       </div>
     </div>

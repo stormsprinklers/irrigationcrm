@@ -84,7 +84,7 @@ export function HolidayCustomerPlanDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[300] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[400] flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="holiday-plan-title"

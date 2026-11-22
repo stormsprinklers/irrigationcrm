@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
-import { CheckCircle2, Mail, Map, MessageSquare, Phone } from "lucide-react";
+import { CheckCircle2, Mail, Map, MessageSquare, Phone, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { absolutePublicBlobUrl, blobProxyUrl } from "@/lib/blob/urls";
 import { EstimateOptionPresentCards, defaultPresentOptionId } from "@/components/estimates/EstimateOptionPresentCards";
@@ -178,7 +179,8 @@ export function PortalEstimateView({
     "confirming" | "paid" | "card-saved" | null
   >(null);
   const [cancellationPolicyOpen, setCancellationPolicyOpen] = useState(false);
-  const [subscriptionAgreementOpen, setSubscriptionAgreementOpen] = useState(false);
+  const [approvalOpen, setApprovalOpen] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [holidayPlanOpen, setHolidayPlanOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -473,10 +475,27 @@ export function PortalEstimateView({
     hasInk.current = false;
   }
 
+  function openApproval() {
+    hasInk.current = false;
+    setTermsAccepted(false);
+    setApprovalOpen(true);
+  }
+
+  function closeApproval() {
+    if (loading) return;
+    hasInk.current = false;
+    setTermsAccepted(false);
+    setApprovalOpen(false);
+  }
+
   async function sign() {
     if (staffPreview) return;
     const canvas = canvasRef.current;
     if (!canvas || !estimate) return;
+    if (!termsAccepted) {
+      toast.error("Please accept the Terms and Conditions before signing");
+      return;
+    }
     if (!hasInk.current) {
       toast.error("Please sign before approving");
       return;
@@ -490,6 +509,7 @@ export function PortalEstimateView({
           signature: canvas.toDataURL("image/png"),
           selectedQuoteTier: selectedTier,
           selectedOptionId,
+          acceptedTerms: true,
           leaseContractYears:
             activeOption?.pricingMode === "lease"
               ? activeOption.leaseContractYears ?? 1
@@ -499,6 +519,9 @@ export function PortalEstimateView({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to sign");
       setEstimate(data.estimate);
+      setApprovalOpen(false);
+      setTermsAccepted(false);
+      hasInk.current = false;
       toast.success(
         estimate.holidayRecurringService
           ? "Signature saved. Save a card on file for future payments to complete your approval."
@@ -622,6 +645,82 @@ export function PortalEstimateView({
         ),
       })
   );
+  const approvalControls = (
+    <div className="space-y-4">
+      <div className="flex items-start gap-3 rounded-lg border border-slate-300 bg-white p-4">
+        <Checkbox
+          id="estimate-legal-acceptance"
+          aria-labelledby="estimate-legal-acceptance-copy"
+          checked={termsAccepted}
+          onCheckedChange={(checked) => {
+            const accepted = checked === true;
+            setTermsAccepted(accepted);
+            if (!accepted) hasInk.current = false;
+          }}
+          disabled={loading}
+          className="mt-1"
+        />
+        <p id="estimate-legal-acceptance-copy" className="text-sm leading-6 text-slate-700">
+          I have read and accept the{" "}
+          <a
+            href="#estimate-terms-contract"
+            className="font-medium text-[#4C9BC8] underline underline-offset-2"
+          >
+            Terms and Conditions
+          </a>
+          , <LegalDocLink href={company.termsOfServiceUrl}>Terms of Service</LegalDocLink>, and{" "}
+          <LegalDocLink href={company.privacyPolicyUrl}>Privacy Policy</LegalDocLink>, and I
+          understand the scope of work quoted includes only that shown in the{" "}
+          {activeOption?.holidayPlan ? (
+            <button
+              type="button"
+              className="font-medium text-[#4C9BC8] underline underline-offset-2"
+              onClick={() => setHolidayPlanOpen(true)}
+            >
+              project plans
+            </button>
+          ) : (
+            <span className="font-medium">project plans</span>
+          )}
+          .
+        </p>
+      </div>
+
+      {termsAccepted ? (
+        <div className="space-y-3">
+          <div>
+            <p className="text-sm font-medium text-slate-900">Signature</p>
+            <p className="text-xs text-slate-600">Sign with your finger or mouse in the box.</p>
+          </div>
+          <canvas
+            ref={canvasRef}
+            width={700}
+            height={240}
+            className="h-36 w-full touch-none rounded border border-slate-300 bg-white sm:h-40"
+            onMouseDown={startDraw}
+            onMouseMove={draw}
+            onMouseUp={() => setDrawing(false)}
+            onMouseLeave={() => setDrawing(false)}
+            onTouchStart={startDraw}
+            onTouchMove={draw}
+            onTouchEnd={() => setDrawing(false)}
+          />
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button type="button" variant="outline" onClick={clearSignature} disabled={loading}>
+              Clear
+            </Button>
+            <Button type="button" onClick={() => void sign()} disabled={loading}>
+              {loading ? "Submitting..." : "Sign and continue"}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-slate-600">
+          Check the acceptance box to continue to the signature.
+        </p>
+      )}
+    </div>
+  );
 
   return (
     <PortalShell
@@ -681,7 +780,6 @@ export function PortalEstimateView({
               <a className="inline-flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-primary transition-colors hover:bg-muted" href={`sms:${company.phone.replace(/[^+\d]/g, "")}`}><MessageSquare className="h-4 w-4" aria-hidden="true" /><span><span className="font-medium">Text</span> {formatPhoneDisplay(company.phone)}</span></a>
             </> : null}
           </div>
-          {company.termsOfServiceUrl ? <div className="mt-2 text-sm"><LegalDocLink href={company.termsOfServiceUrl}>Terms and conditions</LegalDocLink></div> : null}
           <p className="text-sm text-muted-foreground capitalize">
             {estimate.status === "SENT" && estimate.signedAt
               ? "Pending payment arrangement"
@@ -839,9 +937,9 @@ export function PortalEstimateView({
         ) : null}
 
         {canSign ? (
-          <div id="portal-estimate-sign" className="space-y-2">
+          <div id="portal-estimate-sign" className="space-y-3 rounded-lg border bg-white p-4">
             <p className="text-sm font-medium">
-              Sign to approve
+              Ready to approve
               {(estimate.options?.length ?? 0) > 1
                 ? ` (${activeOption?.label ?? "option"})`
                 : selectedTier === "PREMIUM"
@@ -860,62 +958,9 @@ export function PortalEstimateView({
                 Cancellation Fee: {formatCurrency(cancellationFee)}
               </button>
             ) : null}
-            <p className="text-sm text-muted-foreground">Sign with your finger in the box below.</p>
-            <canvas
-              ref={canvasRef}
-              width={700}
-              height={240}
-              className="h-48 w-full max-w-md touch-none rounded border border-border bg-white sm:h-56"
-              onMouseDown={startDraw}
-              onMouseMove={draw}
-              onMouseUp={() => setDrawing(false)}
-              onMouseLeave={() => setDrawing(false)}
-              onTouchStart={startDraw}
-              onTouchMove={draw}
-              onTouchEnd={() => setDrawing(false)}
-            />
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" onClick={clearSignature} disabled={loading}>
-                Clear
-              </Button>
-              <Button onClick={() => void sign()} disabled={loading}>
-                {loading ? "Submitting..." : "Sign and continue"}
-              </Button>
-            </div>
-            <p className="max-w-md text-xs leading-relaxed text-muted-foreground">
-              {requiresHolidayCard ? (
-                <>
-                  This price is assumed as a yearly recurring service and is subject to our{" "}
-                  <button
-                    type="button"
-                    className="font-medium text-[#4C9BC8] underline underline-offset-2"
-                    onClick={() => setCancellationPolicyOpen(true)}
-                  >
-                    cancellation policy
-                  </button>
-                  . A card must be saved on file to approve this holiday lighting estimate.{" "}
-                </>
-              ) : null}
-              {activeSubscriptionAgreement ? (
-                <>
-                  By signing, you agree to the seasonal holiday lighting{" "}
-                  <button
-                    type="button"
-                    className="font-medium text-[#4C9BC8] underline underline-offset-2"
-                    onClick={() => setSubscriptionAgreementOpen(true)}
-                  >
-                    terms and conditions
-                  </button>
-                  .{" "}
-                </>
-              ) : null}
-              {activeSubscriptionAgreement
-                ? "You also acknowledge that you understand our "
-                : "By signing, you acknowledge that you understand our "}
-              <LegalDocLink href={company.termsOfServiceUrl}>Terms of Service</LegalDocLink>,{" "}
-              <LegalDocLink href={company.privacyPolicyUrl}>Privacy Policy</LegalDocLink>, and
-              the scope of work being approved.
-            </p>
+            <Button type="button" onClick={openApproval} disabled={loading}>
+              Approve
+            </Button>
           </div>
         ) : needsPaymentChoice ? (
           <section className="space-y-4 rounded-lg border border-primary/30 bg-primary/5 p-4">
@@ -966,11 +1011,61 @@ export function PortalEstimateView({
       </div>
       {activeSubscriptionAgreement ? (
         <HolidaySubscriptionAgreementDialog
-          open={subscriptionAgreementOpen}
-          onClose={() => setSubscriptionAgreementOpen(false)}
+          open={approvalOpen}
+          onClose={closeApproval}
           agreement={activeSubscriptionAgreement}
           companyName={company.name}
+          title="Terms and Conditions"
+          footerContent={approvalControls}
         />
+      ) : null}
+      {approvalOpen && !activeSubscriptionAgreement ? (
+        <div
+          className="fixed inset-0 z-[350] flex items-center justify-center bg-black/55 p-3 sm:p-6"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="estimate-approval-title"
+        >
+          <div className="flex max-h-[94vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
+            <header className="flex items-start justify-between gap-4 border-b px-5 py-4 sm:px-7">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                  {company.name}
+                </p>
+                <h2 id="estimate-approval-title" className="mt-1 text-xl font-bold text-slate-950">
+                  Terms and Conditions
+                </h2>
+              </div>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                aria-label="Close approval"
+                onClick={closeApproval}
+                disabled={loading}
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </header>
+            <div className="overflow-y-auto px-5 py-6 sm:px-7">
+              <section id="estimate-terms-contract" className="space-y-3 text-sm leading-6 text-slate-700">
+                <h3 className="font-semibold text-slate-950">Estimate approval agreement</h3>
+                <p>
+                  By approving this estimate, you accept the selected option and the quoted scope
+                  of work for {formatCurrency(displayTotal())}. Work outside the quoted scope
+                  requires a separately approved change.
+                </p>
+                <p>
+                  Your electronic signature records your approval of this estimate and the legal
+                  documents acknowledged below.
+                </p>
+              </section>
+            </div>
+            <footer className="border-t bg-slate-50 px-5 py-4 sm:px-7">
+              {approvalControls}
+            </footer>
+          </div>
+        </div>
       ) : null}
       {activeOption?.holidayPlan ? (
         <HolidayCustomerPlanDialog
@@ -998,7 +1093,7 @@ export function PortalEstimateView({
                 return as a customer each year.
               </p>
               <p>
-                If you cancel this yearly service within 10 years, you will be expected to pay the
+                If you cancel this yearly service within 5 years, you will be expected to pay the
                 listed MSRP cost of the installed materials. The cancellation fee for this design
                 is <strong className="text-foreground">{formatCurrency(cancellationFee)}</strong>.
               </p>

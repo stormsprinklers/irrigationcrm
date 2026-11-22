@@ -65,6 +65,40 @@ test("customer authored presentation copy is preserved", () => {
   assert.equal(customerEstimateDescription("Roofline C9 bulbs", ["Call before arrival"]), "Roofline C9 bulbs");
 });
 
+test("seasonal options describe the yearly service as a commitment", () => {
+  const view = serializePortalEstimate({
+    id: "seasonal-estimate",
+    publicToken: "token",
+    status: "SENT",
+    total: 500,
+    subtotal: 500,
+    discountTotal: 0,
+    expiresAt: null,
+    signedAt: null,
+    signatureBlobUrl: null,
+    createdAt: new Date(),
+    designExportMetadata: {
+      source: "holiday-lighting-quote",
+      recurringYearlyService: true,
+      options: [{ letter: "A", pricingMode: "buy", recurringYearlyService: true }],
+    },
+    options: [{
+      id: "seasonal-option",
+      letter: "A",
+      label: "Seasonal lighting",
+      description: "Yearly recurring service · Professional installation included.",
+      sortOrder: 0,
+      subtotal: 500,
+      discountTotal: 0,
+      total: 500,
+    }],
+    lineItems: [],
+  });
+
+  assert.match(view.options[0]?.description ?? "", /Yearly recurring service commitment/);
+  assert.doesNotMatch(view.options[0]?.description ?? "", /service ·/);
+});
+
 test("customer approval uses the shared current deposit threshold", () => {
   const view = serializePortalEstimate({
     id: "estimate",
@@ -246,6 +280,7 @@ test("holiday customer plans expose only selected map geometry and total footage
   });
 
   assert.equal(view.options[0]?.holidayPlan?.totalEstimatedFeet, 142.6);
+  assert.equal(view.options[0]?.holidayPlan?.features[0]?.color, "#DC2626");
   assert.deepEqual(view.options[0]?.holidayPlan?.features[0]?.paths[0]?.[0], {
     lat: 40.1,
     lng: -111.7,

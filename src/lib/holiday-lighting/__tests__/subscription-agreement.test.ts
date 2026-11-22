@@ -50,6 +50,7 @@ test("seasonal agreement fills Exhibit A and itemized Exhibit B from the selecte
   assert.equal(agreement.materials[0]?.manufacturerModel, "");
   assert.equal(agreement.materials.reduce((sum, item) => sum + item.totalMsrp, 0), 812.5);
   assert.equal(agreement.promotionalPhotoConsent, false);
+  assert.equal(agreement.version, "2026-11-21");
 });
 
 test("legacy flat cancellation costs still produce a materials-list row", () => {

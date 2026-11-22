@@ -144,6 +144,13 @@ export async function POST(request: NextRequest, { params }: Params) {
           ? (Number(body.leaseContractYears) as HolidayLeaseCommitmentYears)
           : null);
 
+  if (body.acceptedTerms !== true) {
+    return NextResponse.json(
+      { error: "You must accept the Terms and Conditions before signing" },
+      { status: 400 }
+    );
+  }
+
   if (body.leaseContractYears != null && requestedLeaseContractYears == null) {
     return NextResponse.json({ error: "Choose a valid lease commitment" }, { status: 400 });
   }
@@ -353,6 +360,26 @@ export async function POST(request: NextRequest, { params }: Params) {
       },
     };
   }
+
+  const legalMetadataRoot =
+    nextMetadata && typeof nextMetadata === "object" && !Array.isArray(nextMetadata)
+      ? (nextMetadata as Record<string, unknown>)
+      : {};
+  nextMetadata = {
+    ...legalMetadataRoot,
+    estimateLegalAcceptance: {
+      version: "2026-11-21",
+      acceptedAt: signatureAcceptedAt.toISOString(),
+      selectedOptionId,
+      selectedQuoteTier,
+      termsOfServiceUrl:
+        "termsOfServiceUrl" in company ? company.termsOfServiceUrl ?? null : null,
+      privacyPolicyUrl:
+        "privacyPolicyUrl" in company ? company.privacyPolicyUrl ?? null : null,
+      statement:
+        "I have read and accept the Terms and Conditions, Terms of Service, and Privacy Policy, and I understand the scope of work quoted includes only that shown in the project plans.",
+    },
+  };
 
   const updated = await prisma.$transaction(async (tx) => {
     if (agreementAttachment) {

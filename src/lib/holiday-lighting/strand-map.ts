@@ -23,6 +23,8 @@ export const HOLIDAY_STRAND_COLORS = [
   "#BE185D",
 ] as const;
 
+export const HOLIDAY_CUSTOMER_PLAN_COLOR = "#DC2626";
+
 export type HolidayStrandMapFeature = {
   id: string;
   label: string;
@@ -259,7 +261,7 @@ export function customerHolidayPlan(
     features: map.features.map((feature) => ({
       id: feature.id,
       label: feature.label,
-      color: feature.color,
+      color: HOLIDAY_CUSTOMER_PLAN_COLOR,
       paths: feature.paths,
       kind: feature.kind,
       ...(feature.placement ? { placement: feature.placement } : {}),
