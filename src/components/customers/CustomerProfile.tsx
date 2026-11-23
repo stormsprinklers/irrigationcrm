@@ -2057,7 +2057,7 @@ export function CustomerProfile({ customerId }: Props) {
           title="Void this invoice?"
           description={`This marks invoice ${
             invoices.find((invoice) => invoice.id === voidInvoiceId)?.invoiceNumber ?? ""
-          } as void. It cannot be collected after that.`}
+          } as void. It cannot be collected after that. Existing payments will remain recorded and will not be refunded.`}
           confirmLabel="Void invoice"
           confirmVariant="destructive"
           busy={invoiceActingId === voidInvoiceId}
